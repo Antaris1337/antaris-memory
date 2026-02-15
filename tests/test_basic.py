@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 
-from antaris_memory import MemorySystem
+from antaris_memory import MemorySystem, InputGate, KnowledgeSynthesizer
 from antaris_memory.entry import MemoryEntry
 
 
@@ -181,6 +181,246 @@ class TestMemorySystem(unittest.TestCase):
         doc_entries = [m for m in self.memory_system.memories if m.category == "documents"]
         self.assertGreater(len(doc_entries), 0)
         self.assertEqual(doc_entries[0].source, test_file)
+
+
+class TestInputGate(unittest.TestCase):
+    """Test the input gating system."""
+    
+    def setUp(self):
+        self.gate = InputGate()
+    
+    def test_p0_classification(self):
+        """Test P0 (critical) classification."""
+        # Security issues
+        self.assertEqual(self.gate.classify("Security breach detected in user authentication"), "P0")
+        self.assertEqual(self.gate.classify("Critical error in payment processing"), "P0")
+        
+        # Financial commitments
+        self.assertEqual(self.gate.classify("Budget approved for $50,000 project"), "P0")
+        self.assertEqual(self.gate.classify("Contract signed with new vendor"), "P0")
+        
+        # Deadlines
+        self.assertEqual(self.gate.classify("Urgent deadline tomorrow for product launch"), "P0")
+    
+    def test_p1_classification(self):
+        """Test P1 (operational) classification."""
+        # Decisions
+        self.assertEqual(self.gate.classify("We decided to use PostgreSQL for the database"), "P1")
+        self.assertEqual(self.gate.classify("Task assigned to John for API development"), "P1")
+        
+        # Technical choices
+        self.assertEqual(self.gate.classify("Selected React framework for frontend"), "P1")
+        self.assertEqual(self.gate.classify("API integration with third-party service approved"), "P1")
+        
+        # Meeting outcomes
+        self.assertEqual(self.gate.classify("Meeting concluded with next steps defined"), "P1")
+    
+    def test_p2_classification(self):
+        """Test P2 (contextual) classification."""
+        # Background information
+        self.assertEqual(self.gate.classify("For reference, here are the technical specifications"), "P2")
+        self.assertEqual(self.gate.classify("Research shows that users prefer simple interfaces"), "P2")
+        
+        # General discussion
+        self.assertEqual(self.gate.classify("This project involves web development and data analysis"), "P2")
+    
+    def test_p3_classification(self):
+        """Test P3 (ephemeral) classification."""
+        # Greetings
+        self.assertEqual(self.gate.classify("Hi there!"), "P3")
+        self.assertEqual(self.gate.classify("Good morning everyone"), "P3")
+        
+        # Acknowledgments
+        self.assertEqual(self.gate.classify("Thanks"), "P3")
+        self.assertEqual(self.gate.classify("OK"), "P3")
+        self.assertEqual(self.gate.classify("Got it"), "P3")
+        
+        # Filler
+        self.assertEqual(self.gate.classify("lol"), "P3")
+        self.assertEqual(self.gate.classify("nice"), "P3")
+        
+        # Very short content
+        self.assertEqual(self.gate.classify("k"), "P3")
+        self.assertEqual(self.gate.classify(""), "P3")
+    
+    def test_should_store(self):
+        """Test storage decision logic."""
+        # P0-P2 should be stored
+        self.assertTrue(self.gate.should_store("Critical security issue found"))
+        self.assertTrue(self.gate.should_store("Decided to use new technology"))
+        self.assertTrue(self.gate.should_store("Background research on market trends"))
+        
+        # P3 should not be stored
+        self.assertFalse(self.gate.should_store("Thanks"))
+        self.assertFalse(self.gate.should_store("lol"))
+        self.assertFalse(self.gate.should_store("OK"))
+    
+    def test_route(self):
+        """Test complete routing functionality."""
+        # Test P0 routing
+        route = self.gate.route("Critical deadline approaching for project delivery")
+        self.assertEqual(route["priority"], "P0")
+        self.assertEqual(route["category"], "strategic")
+        self.assertTrue(route["store"])
+        
+        # Test P1 routing
+        route = self.gate.route("Team decided to implement new feature")
+        self.assertEqual(route["priority"], "P1")
+        self.assertEqual(route["category"], "operational")
+        self.assertTrue(route["store"])
+        
+        # Test P3 routing
+        route = self.gate.route("thanks")
+        self.assertEqual(route["priority"], "P3")
+        self.assertEqual(route["category"], "ephemeral")
+        self.assertFalse(route["store"])
+    
+    def test_context_hints(self):
+        """Test classification with context hints."""
+        context = {"source": "security_alert", "category": "critical"}
+        self.assertEqual(self.gate.classify("System notification", context), "P0")
+        
+        context = {"source": "meeting_notes", "category": "operational"}
+        self.assertEqual(self.gate.classify("Discussion about project timeline", context), "P1")
+
+
+class TestKnowledgeSynthesizer(unittest.TestCase):
+    """Test the knowledge synthesis engine."""
+    
+    def setUp(self):
+        self.synthesizer = KnowledgeSynthesizer()
+        
+        # Create some test memories
+        self.test_memories = [
+            MemoryEntry("What is PostgreSQL and how does it compare to MySQL?", "questions"),
+            MemoryEntry("We need to research Docker containerization", "todo"),
+            MemoryEntry("API endpoint returns user data in JSON format", "technical"),
+            MemoryEntry("Using React for frontend development", "technical"),
+            MemoryEntry("PostgreSQL mentioned in database discussion", "reference"),
+            MemoryEntry("TODO: Set up CI/CD pipeline", "todo"),
+            MemoryEntry("Docker containers provide isolation", "research"),
+        ]
+    
+    def test_identify_gaps(self):
+        """Test knowledge gap identification."""
+        gaps = self.synthesizer.identify_gaps(self.test_memories)
+        self.assertIsInstance(gaps, list)
+        self.assertGreater(len(gaps), 0)
+        
+        # Should identify questions
+        gap_text = " ".join(gaps)
+        self.assertIn("question", gap_text.lower())
+    
+    def test_suggest_research_topics(self):
+        """Test research topic suggestions."""
+        suggestions = self.synthesizer.suggest_research_topics(self.test_memories, limit=3)
+        self.assertIsInstance(suggestions, list)
+        self.assertLessEqual(len(suggestions), 3)
+        
+        if suggestions:
+            suggestion = suggestions[0]
+            self.assertIn("topic", suggestion)
+            self.assertIn("reason", suggestion)
+            self.assertIn("priority", suggestion)
+            self.assertIn(suggestion["priority"], ["P0", "P1", "P2"])
+    
+    def test_synthesize(self):
+        """Test knowledge synthesis from new information."""
+        new_info = "PostgreSQL is a powerful open-source relational database system.\nDocker is a containerization platform that packages applications."
+        
+        synthesized = self.synthesizer.synthesize(self.test_memories, new_info, "research_source")
+        self.assertIsInstance(synthesized, list)
+        self.assertGreater(len(synthesized), 0)
+        
+        # Check synthesized entries have expected properties
+        if synthesized:
+            entry = synthesized[0]
+            self.assertIsInstance(entry, MemoryEntry)
+            self.assertIn("synthesis", entry.tags)
+            self.assertGreater(entry.confidence, 0.5)
+    
+    def test_run_cycle(self):
+        """Test complete synthesis cycle."""
+        research_results = {
+            "database_research": "PostgreSQL offers ACID compliance and advanced features",
+            "container_research": "Docker provides lightweight containerization"
+        }
+        
+        report = self.synthesizer.run_cycle(self.test_memories, research_results)
+        
+        self.assertIsInstance(report, dict)
+        self.assertIn("timestamp", report)
+        self.assertIn("gaps_identified", report)
+        self.assertIn("research_suggestions", report)
+        self.assertIn("synthesized_entries", report)
+
+
+class TestMemorySystemWithGating(unittest.TestCase):
+    """Test MemorySystem with gating integration."""
+    
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.memory_system = MemorySystem(workspace=self.temp_dir, half_life=7.0)
+    
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_ingest_with_gating(self):
+        """Test gated ingestion functionality."""
+        content = """
+        Critical security vulnerability found in authentication system
+        We decided to use PostgreSQL for the database  
+        This is some background information about the project
+        Thanks for the update
+        OK got it
+        lol that's funny
+        """
+        
+        count = self.memory_system.ingest_with_gating(content, "test_source")
+        
+        # Should ingest P0-P2 content but not P3
+        self.assertGreater(count, 0)
+        self.assertLess(count, 6)  # Should be less than total lines due to P3 filtering
+        
+        # Check that P3 content was filtered out
+        content_texts = [m.content for m in self.memory_system.memories]
+        combined_content = " ".join(content_texts)
+        
+        # Should contain important content
+        self.assertIn("security", combined_content.lower())
+        self.assertIn("postgresql", combined_content.lower())
+        
+        # Should not contain P3 filler
+        self.assertNotIn("Thanks for the update", combined_content)
+        self.assertNotIn("lol that's funny", combined_content)
+    
+    def test_synthesis_integration(self):
+        """Test synthesis integration in memory system."""
+        # Add some memories with gaps
+        self.memory_system.ingest("What is machine learning?", source="questions")
+        self.memory_system.ingest("TODO: Research neural networks", source="todo")
+        self.memory_system.ingest("Using TensorFlow for ML development", source="technical")
+        
+        # Test research suggestions
+        suggestions = self.memory_system.research_suggestions(limit=2)
+        self.assertIsInstance(suggestions, list)
+        self.assertLessEqual(len(suggestions), 2)
+        
+        # Test synthesis cycle
+        research_results = {
+            "ml_research": "Machine learning is a subset of AI that enables computers to learn without explicit programming"
+        }
+        
+        report = self.memory_system.synthesize(research_results)
+        self.assertIsInstance(report, dict)
+        self.assertIn("gaps_identified", report)
+        
+        # Should have added new synthesized memories
+        if "synthesized_entries" in report and report["synthesized_entries"] > 0:
+            # Check that new entries were added
+            synthesis_entries = [m for m in self.memory_system.memories if "synthesis" in m.tags]
+            self.assertGreater(len(synthesis_entries), 0)
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ mem.save()
 | Feature | Description |
 |---------|-------------|
 | **Input Gating (P0-P3)** | Classify and route information at intake — critical, operational, contextual, or ephemeral — so low-value data never enters storage |
-| **Autonomous Knowledge Synthesis** | Agent independently researches and integrates new knowledge during idle periods (v0.2) |
+| **Autonomous Knowledge Synthesis** | Agent independently researches and integrates new knowledge during idle periods |
 | **Zero Infrastructure** | No databases, no vector stores, no cloud services. Just files. |
 | **Memory Decay** | Ebbinghaus-inspired forgetting curves with reinforcement on access |
 | **Sentiment Tagging** | Auto-detect emotional context (positive, negative, urgent, strategic, financial) |
@@ -70,6 +70,33 @@ Or from source:
 git clone https://github.com/Antaris-Analytics/antaris-memory.git
 cd antaris-memory
 pip install -e .
+```
+
+## What's New in v0.2
+
+**🚪 Input Gating (P0-P3)**: Smart content triage automatically classifies information at intake:
+- **P0 (Critical)**: Security alerts, errors, financial commitments, deadlines → strategic category
+- **P1 (Operational)**: Decisions, assignments, technical choices → operational category  
+- **P2 (Contextual)**: Background info, research, discussion → tactical category
+- **P3 (Ephemeral)**: Greetings, "thanks", "OK", "lol" → silently filtered out
+
+**🧠 Autonomous Knowledge Synthesis**: During idle periods, your agent now:
+- Identifies knowledge gaps (unanswered questions, TODOs, unexplained terms)
+- Suggests research topics based on memory analysis
+- Integrates new research findings with existing knowledge
+- Creates compound knowledge entries from cross-referenced information
+
+**🔌 Integration Examples**: Ready-to-use examples for OpenClaw agents and LangChain chains.
+
+```python
+# Use intelligent gating
+mem.ingest_with_gating(conversation, source="chat", context={"session": "123"})
+
+# Get research suggestions  
+suggestions = mem.research_suggestions(limit=5)
+
+# Run autonomous synthesis
+report = mem.synthesize(research_results={"topic": "new findings..."})
 ```
 
 ## Quick Start

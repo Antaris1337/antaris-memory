@@ -15,7 +15,7 @@ Usage:
     mem.save()
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __patent__ = "US Application #63/983,397 (Patent Pending)"
 
 from antaris_memory.core import MemorySystem
@@ -27,6 +27,8 @@ from antaris_memory.confidence import ConfidenceEngine
 from antaris_memory.compression import CompressionEngine
 from antaris_memory.forgetting import ForgettingEngine
 from antaris_memory.consolidation import ConsolidationEngine
+from antaris_memory.gating import InputGate
+from antaris_memory.synthesis import KnowledgeSynthesizer
 
 __all__ = [
     "MemorySystem",
@@ -38,4 +40,6 @@ __all__ = [
     "CompressionEngine",
     "ForgettingEngine",
     "ConsolidationEngine",
+    "InputGate",
+    "KnowledgeSynthesizer",
 ]

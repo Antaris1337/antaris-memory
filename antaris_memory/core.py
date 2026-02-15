@@ -27,6 +27,8 @@ from .confidence import ConfidenceEngine
 from .compression import CompressionEngine
 from .forgetting import ForgettingEngine
 from .consolidation import ConsolidationEngine
+from .gating import InputGate
+from .synthesis import KnowledgeSynthesizer
 
 # Default tags to auto-extract
 _DEFAULT_TAG_TERMS = [
@@ -67,6 +69,8 @@ class MemorySystem:
         self.compression = CompressionEngine()
         self.forgetting = ForgettingEngine()
         self.consolidation = ConsolidationEngine(decay=self.decay)
+        self.gating = InputGate()
+        self.synthesis = KnowledgeSynthesizer()
 
         # Tag terms
         self._tag_terms = list(set(_DEFAULT_TAG_TERMS + (tag_terms or [])))
@@ -80,7 +84,7 @@ class MemorySystem:
     def save(self) -> str:
         """Write memory state to disk. Returns path."""
         data = {
-            "version": "0.1.0",
+            "version": "0.2.0",
             "patent": "US Application #63/983,397",
             "saved_at": datetime.now().isoformat(),
             "count": len(self.memories),
@@ -141,6 +145,54 @@ class MemorySystem:
         count = 0
         for f in sorted(d.glob(pattern)):
             count += self.ingest_file(str(f), category=category)
+        return count
+
+    def ingest_with_gating(self, content: str, source: str = "inline", context: Dict = None) -> int:
+        """Ingest content with automatic priority-based routing and filtering.
+        
+        P3 (ephemeral) content is silently dropped. P0-P2 content is stored
+        with appropriate category assignment.
+        
+        Returns count of new memories added (P3 content doesn't count).
+        """
+        count = 0
+        for i, line in enumerate(content.split("\n")):
+            stripped = line.strip()
+            if len(stripped) < 5:  # Skip very short lines
+                continue
+                
+            # Use gating system to classify and route
+            gate_context = context or {}
+            gate_context.update({"source": source, "line": i + 1})
+            routing = self.gating.route(stripped, gate_context)
+            
+            # Skip P3 ephemeral content
+            if not routing["store"]:
+                continue
+                
+            # Check for duplicates
+            entry = MemoryEntry(stripped, source, i + 1, routing["category"])
+            if entry.hash in self._hashes:
+                continue
+                
+            # Apply standard processing
+            entry.tags = self._extract_tags(stripped)
+            entry.sentiment = self.sentiment.analyze(stripped)
+            
+            # Set confidence based on priority
+            if routing["priority"] == "P0":
+                entry.confidence = 0.9  # High confidence for critical items
+            elif routing["priority"] == "P1":
+                entry.confidence = 0.7  # Good confidence for operational items
+            else:  # P2
+                entry.confidence = 0.5  # Standard confidence for contextual items
+                
+            entry.tags.append(routing["priority"])  # Add priority as tag
+            
+            self.memories.append(entry)
+            self._hashes.add(entry.hash)
+            count += 1
+            
         return count
 
     # ── search ──────────────────────────────────────────────────────────
@@ -228,6 +280,40 @@ class MemorySystem:
         """Compress daily files older than *days*."""
         mem_dir = os.path.join(self.workspace, "memory")
         return self.compression.compress_old_files(mem_dir, days)
+
+    # ── synthesis ───────────────────────────────────────────────────────
+
+    def synthesize(self, research_results: Dict = None) -> Dict:
+        """Run autonomous knowledge synthesis cycle.
+        
+        Args:
+            research_results: Optional dict of {source: research_info} to integrate
+            
+        Returns:
+            Synthesis report with gaps, suggestions, and integration results
+        """
+        report = self.synthesis.run_cycle(self.memories, research_results)
+        
+        # Add any new synthesized entries to our memory store
+        if research_results and "new_entries" in report:
+            for entry_data in report["new_entries"]:
+                entry = MemoryEntry.from_dict(entry_data)
+                if entry.hash not in self._hashes:
+                    self.memories.append(entry)
+                    self._hashes.add(entry.hash)
+        
+        return report
+
+    def research_suggestions(self, limit: int = 5) -> List[Dict]:
+        """Get research topic suggestions based on knowledge gaps.
+        
+        Args:
+            limit: Maximum number of suggestions to return
+            
+        Returns:
+            List of research suggestions with topic, reason, and priority
+        """
+        return self.synthesis.suggest_research_topics(self.memories, limit)
 
     # ── stats ───────────────────────────────────────────────────────────
 
