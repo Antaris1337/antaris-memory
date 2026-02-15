@@ -1,6 +1,6 @@
 """
 Antaris Memory — Human-like memory for AI agents.
-Patent Pending: US Application #63/983,397
+
 
 Give your AI agents persistent memory that decays, reinforces,
 feels, reasons about time, and cleans up after itself.
@@ -16,7 +16,6 @@ Usage:
 """
 
 __version__ = "0.2.0"
-__patent__ = "US Application #63/983,397 (Patent Pending)"
 
 from antaris_memory.core import MemorySystem
 from antaris_memory.entry import MemoryEntry

@@ -32,14 +32,13 @@ from .synthesis import KnowledgeSynthesizer
 
 # Default tags to auto-extract
 _DEFAULT_TAG_TERMS = [
-    "api", "llc", "patent", "memory", "grant", "saas", "enterprise",
     "web3", "ethereum", "postgresql", "optimization", "cost",
     "revenue", "security", "deployment", "production", "testing",
 ]
 
 
 class MemorySystem:
-    """Complete memory system with all patented capabilities.
+    """Complete memory system with decay, sentiment, gating, and synthesis.
 
     Parameters
     ----------
@@ -85,7 +84,6 @@ class MemorySystem:
         """Write memory state to disk. Returns path."""
         data = {
             "version": "0.2.0",
-            "patent": "US Application #63/983,397",
             "saved_at": datetime.now().isoformat(),
             "count": len(self.memories),
             "memories": [m.to_dict() for m in self.memories],

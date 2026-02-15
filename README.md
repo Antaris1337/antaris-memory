@@ -19,10 +19,12 @@ Store, search, decay, and consolidate agent memories using only the Python stand
 
 ## What This Isn't
 
-- Not a vector database (no embeddings by default — optional in future versions)
-- Not a knowledge graph
-- Not magic — memory quality depends on what you feed it
-- Not LLM-dependent — everything is deterministic keyword/pattern matching
+- **Not a vector database** — no embeddings by default (optional in a future release)
+- **Not a knowledge graph** — it's a flat memory store with metadata
+- **Not magic** — memory quality depends on what you feed it
+- **Not LLM-dependent** — everything is deterministic keyword/pattern matching. Zero API calls, zero tokens
+- **Will not detect semantic contradictions phrased differently** — contradiction detection compares normalized statements and flags conflicts when mutually exclusive assertions share the same subject. It's rule-based, not semantic
+- **No network calls** — runs fully offline, never phones home
 
 ## The Problem
 
@@ -45,7 +47,7 @@ results = mem.search("what did we decide about pricing?")
 
 # Ask about time
 memories = mem.on_date("2026-02-14")
-story = mem.narrative(topic="patent filing")
+story = mem.narrative(topic="database migration")
 
 # Forget things (GDPR-ready)
 mem.forget(entity="John Doe")
@@ -235,9 +237,8 @@ Antaris Memory uses only Python standard library. No numpy, no torch, no API key
 | Contradiction detection | ✅ | ❌ | ❌ | ⚠️ Partial |
 | Selective forgetting | ✅ | ❌ | ⚠️ Partial | ⚠️ Partial |
 | No infrastructure needed | ✅ | ❌ | ❌ | ❌ |
-| Patent pending | ✅ | ❌ | ❌ | ❌ |
 
 ## License
 
-Apache 2.0 — free for personal and commercial use.
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 

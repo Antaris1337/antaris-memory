@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "antaris-memory"
 version = "0.2.0"
-description = "Human-like memory for AI agents. Patent pending."
+description = "Persistent memory for AI agents. Zero dependencies."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.9"
