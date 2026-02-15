@@ -1,16 +1,32 @@
 # 🧠 Antaris Memory
 
-**Human-like memory for AI agents. Patent pending.**
+**Persistent memory for AI agents. Zero dependencies. Just files.**
 
-Give your AI agents persistent memory that decays, reinforces, feels, reasons about time, detects its own contradictions, and cleans up after itself. For under $5/year.
+Store, search, decay, and consolidate agent memories using only the Python standard library. No vector databases, no infrastructure, no API keys required.
 
 [![PyPI](https://img.shields.io/pypi/v/antaris-memory)](https://pypi.org/project/antaris-memory/)
+[![Tests](https://img.shields.io/badge/tests-22%20passing-brightgreen)](https://github.com/Antaris-Analytics/antaris-memory)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
+## What This Is
+
+- A **file-based memory store** for AI agents with automatic decay, sentiment tagging, and temporal indexing
+- Stores structured facts, decisions, and context as JSON — searchable by keyword, date, category, or sentiment
+- Retrieval is weighted by **recency × importance × access frequency** (Ebbinghaus-inspired decay)
+- "Contradiction detection" means: flag when two stored memories contain conflicting claims (keyword-based, deterministic — no LLM required)
+- Runs **fully offline** with zero external dependencies
+
+## What This Isn't
+
+- Not a vector database (no embeddings by default — optional in future versions)
+- Not a knowledge graph
+- Not magic — memory quality depends on what you feed it
+- Not LLM-dependent — everything is deterministic keyword/pattern matching
+
 ## The Problem
 
-Every AI agent forgets everything between sessions. GPT, Claude, Gemini — they all start from zero every time. Enterprise managed memory solutions cost $5,000-$50,000/year, and even free open-source alternatives require complex database infrastructure to deploy.
+Every AI agent forgets everything between sessions. The typical solutions — Mem0, Zep, LangChain Memory — require database infrastructure to deploy. Sometimes you just want persistent memory that works with `pip install` and a folder.
 
 ## The Solution
 
@@ -204,7 +220,7 @@ mem = MemorySystem(
 
 Antaris Memory uses only Python standard library. No numpy, no torch, no API keys required.
 
-**Optional:** Install `openai` for embedding-based semantic search (coming in v0.2).
+**Optional:** Install `openai` for embedding-based semantic search (planned for a future release).
 
 ## Comparison
 
