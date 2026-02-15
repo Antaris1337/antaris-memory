@@ -64,7 +64,7 @@ pip install antaris-memory
 Or from source:
 
 ```bash
-git clone https://github.com/Antaris1337/antaris-memory.git
+git clone https://github.com/Antaris-Analytics/antaris-memory.git
 cd antaris-memory
 pip install -e .
 ```

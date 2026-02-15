@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "antaris-memory"
-version = "0.1.0"
+version = "0.1.1"
 description = "Human-like memory for AI agents. Patent pending."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -27,9 +27,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Antaris1337/antaris-memory"
+Homepage = "https://github.com/Antaris-Analytics/antaris-memory"
 Documentation = "https://memory.antarisanalytics.ai"
-Repository = "https://github.com/Antaris1337/antaris-memory"
+Repository = "https://github.com/Antaris-Analytics/antaris-memory"
 
 [project.optional-dependencies]
 embeddings = ["openai>=1.0"]
