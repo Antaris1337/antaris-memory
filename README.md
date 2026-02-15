@@ -4,7 +4,7 @@
 
 Give your AI agents persistent memory that decays, reinforces, feels, reasons about time, detects its own contradictions, and cleans up after itself. For under $5/year.
 
-[![Patent Pending](https://img.shields.io/badge/Patent-Pending-blue)](https://antarisanalytics.ai)
+[![PyPI](https://img.shields.io/pypi/v/antaris-memory)](https://pypi.org/project/antaris-memory/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
@@ -44,16 +44,16 @@ mem.save()
 
 ## Features
 
-| Feature | Description | Patent Claim |
-|---------|-------------|-------------|
-| **Memory Decay** | Ebbinghaus-inspired forgetting curves with reinforcement on access | Claim 16 |
-| **Sentiment Tagging** | Auto-detect emotional context (positive, negative, urgent, strategic, financial) | Claim 17 |
-| **Temporal Reasoning** | Query by date, date ranges, build chronological narratives | Claim 22 |
-| **Confidence Scoring** | Track reliability, increase on corroboration | Claim 23 |
-| **Contradiction Detection** | Flag when memories conflict with each other | Claim 23 |
-| **Memory Compression** | Auto-summarize old files, preserve key points | Claim 20 |
-| **Selective Forgetting** | GDPR-ready deletion by topic, entity, or date with audit trail | Claim 21 |
-| **Dream State** | Background consolidation: find duplicates, cluster topics, generate insights | Claim 24 |
+| Feature | Description |
+|---------|-------------|
+| **Memory Decay** | Ebbinghaus-inspired forgetting curves with reinforcement on access |
+| **Sentiment Tagging** | Auto-detect emotional context (positive, negative, urgent, strategic, financial) |
+| **Temporal Reasoning** | Query by date, date ranges, build chronological narratives |
+| **Confidence Scoring** | Track reliability, increase on corroboration |
+| **Contradiction Detection** | Flag when memories conflict with each other |
+| **Memory Compression** | Auto-summarize old files, preserve key points |
+| **Selective Forgetting** | GDPR-ready deletion by topic, entity, or date with audit trail |
+| **Dream State** | Background consolidation: find duplicates, cluster topics, generate insights |
 
 ## Install
 
@@ -188,7 +188,7 @@ Antaris Memory uses only Python standard library. No numpy, no torch, no API key
 | Temporal reasoning | ✅ | ❌ | ❌ | ✅ |
 | Contradiction detection | ✅ | ❌ | ❌ | ⚠️ Partial |
 | Selective forgetting | ✅ | ❌ | ⚠️ Partial | ⚠️ Partial |
-| Self-hosted cost | Free | Free | Free (OSS) | Free (OSS) |
+| No infrastructure needed | ✅ | ❌ | ❌ | ❌ |
 | Patent pending | ✅ | ❌ | ❌ | ❌ |
 
 ## License

@@ -1,12 +1,12 @@
 Metadata-Version: 2.4
 Name: antaris-memory
-Version: 0.1.0
+Version: 0.1.1
 Summary: Human-like memory for AI agents. Patent pending.
 Author-email: Antaris Analytics <moro@antarisanalytics.ai>
 License: Apache-2.0
-Project-URL: Homepage, https://github.com/Antaris1337/antaris-memory
+Project-URL: Homepage, https://github.com/Antaris-Analytics/antaris-memory
 Project-URL: Documentation, https://memory.antarisanalytics.ai
-Project-URL: Repository, https://github.com/Antaris1337/antaris-memory
+Project-URL: Repository, https://github.com/Antaris-Analytics/antaris-memory
 Keywords: ai,memory,agents,llm,persistence,recall
 Classifier: Development Status :: 3 - Alpha
 Classifier: Intended Audience :: Developers
@@ -93,7 +93,7 @@ pip install antaris-memory
 Or from source:
 
 ```bash
-git clone https://github.com/Antaris1337/antaris-memory.git
+git clone https://github.com/Antaris-Analytics/antaris-memory.git
 cd antaris-memory
 pip install -e .
 ```
@@ -209,28 +209,18 @@ Antaris Memory uses only Python standard library. No numpy, no torch, no API key
 
 | Feature | Antaris Memory | LangChain Memory | Mem0 | Zep |
 |---------|---------------|-----------------|------|-----|
-| Memory decay curves | ✅ | ❌ | ❌ | ❌ |
-| Emotional tagging | ✅ | ❌ | ❌ | ❌ |
-| Temporal reasoning | ✅ | ❌ | ❌ | ❌ |
-| Contradiction detection | ✅ | ❌ | ❌ | ❌ |
-| Selective forgetting | ✅ | ❌ | ❌ | ❌ |
-| Dream state consolidation | ✅ | ❌ | ❌ | ❌ |
-| Zero dependencies | ✅ | ❌ | ❌ | ❌ |
-| Cost per year | <$5 | $500+ | $500+ | $1000+ |
-| Patent protected | ✅ | ❌ | ❌ | ❌ |
+| Input gating (P0-P3) | ✅ | ❌ | ❌ | ❌ |
+| Autonomous knowledge synthesis | ✅ | ❌ | ❌ | ❌ |
+| No database required | ✅ | ❌ | ❌ | ❌ |
+| Memory decay curves | ✅ | ❌ | ❌ | ⚠️ Partial |
+| Emotional tagging | ✅ | ❌ | ❌ | ✅ |
+| Temporal reasoning | ✅ | ❌ | ❌ | ✅ |
+| Contradiction detection | ✅ | ❌ | ❌ | ⚠️ Partial |
+| Selective forgetting | ✅ | ❌ | ⚠️ Partial | ⚠️ Partial |
+| Self-hosted cost | Free | Free | Free (OSS) | Free (OSS) |
+| Patent pending | ✅ | ❌ | ❌ | ❌ |
 
 ## License
 
 Apache 2.0 — free for personal and commercial use.
 
-The underlying technology is protected by US Patent Application #63/983,397 (pending). Commercial products that implement the patented methods require a commercial license from Antaris Analytics.
-
-## Built by
-
-**Antaris Analytics** — AI memory intelligence  
-📧 moro@antarisanalytics.ai  
-🌐 [antarisanalytics.ai](https://antarisanalytics.ai)
-
----
-
-*"We gave AI agents human-like memory for $5/year."*
