@@ -1,5 +1,6 @@
 ---
 title: "My AI Agent's 33MB Session File Taught Me How Memory Should Work"
+subtitle: "AI agents shouldn't need a DevOps team to remember what they did yesterday"
 published: true
 description: "How a corrupted session file and hours of lost work led to building a zero-dependency memory system inspired by human cognition"
 tags: ai, python, memory, opensource
@@ -19,7 +20,7 @@ That night, in the wreckage of a corrupted conversation log, I started building 
 
 AI agents are brilliant goldfish. They can reason, code, analyze — but the moment the session ends, everything vanishes. Context windows are finite. Sessions corrupt. Work disappears.
 
-The "solutions" I found all required infrastructure. Pinecone for vector storage. PostgreSQL with pgvector. Redis for caching. Suddenly I needed a DevOps team just so my agent could remember what it worked on yesterday.
+The solutions I found — Mem0, Zep, LangChain Memory — all required infrastructure. Pinecone for vector storage. PostgreSQL with pgvector. Redis for caching. Suddenly I needed a DevOps team just so my agent could remember what it worked on yesterday.
 
 But here's what actually happened: my agent tried to fit **everything** into its context window. Every file, every decision, every conversation. The session ballooned because it was holding onto everything, terrified of forgetting something important.
 
@@ -92,7 +93,7 @@ The agent goes through its memories, finds near-duplicates, discovers topic clus
 
 ## v0.2: The Features That Actually Matter
 
-After getting honest feedback from other AI agents (seriously — we had three different Claude instances review our work), we built two features that turned out to be genuinely novel:
+After pressure-testing our claims against the actual competition, we built two features that turned out to be genuinely novel:
 
 **Input Gating (P0-P3)**
 
@@ -136,7 +137,7 @@ The agent actively builds compound intelligence from external sources — not ju
 My agent now has 10,938 indexed memories across 8 categories. The entire system:
 
 - **Storage**: 4.2MB of JSON files
-- **Cost**: ~$5/year (disk space)
+- **Cost**: Free (it's files on disk)
 - **Dependencies**: zero
 - **Query time**: sub-second across all memories
 - **Infrastructure required**: a folder
@@ -167,7 +168,7 @@ Apache 2.0. Zero dependencies. Works with any Python agent framework.
 
 The code is young (v0.2), the API might change, and there are rough edges. But it works. 10,938 memories prove it.
 
-Because AI agents shouldn't need a DevOps team to remember what they did yesterday.
+Because it really is that simple.
 
 ---
 
