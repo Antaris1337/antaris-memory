@@ -10,7 +10,7 @@ Give your AI agents persistent memory that decays, reinforces, feels, reasons ab
 
 ## The Problem
 
-Every AI agent forgets everything between sessions. GPT, Claude, Gemini — they all start from zero every time. Enterprise memory solutions cost $5,000-$50,000/year and provide basic retrieval at best.
+Every AI agent forgets everything between sessions. GPT, Claude, Gemini — they all start from zero every time. Enterprise managed memory solutions cost $5,000-$50,000/year, and even free open-source alternatives require complex database infrastructure to deploy.
 
 ## The Solution
 
@@ -46,6 +46,9 @@ mem.save()
 
 | Feature | Description |
 |---------|-------------|
+| **Input Gating (P0-P3)** | Classify and route information at intake — critical, operational, contextual, or ephemeral — so low-value data never enters storage |
+| **Autonomous Knowledge Synthesis** | Agent independently researches and integrates new knowledge during idle periods (v0.2) |
+| **Zero Infrastructure** | No databases, no vector stores, no cloud services. Just files. |
 | **Memory Decay** | Ebbinghaus-inspired forgetting curves with reinforcement on access |
 | **Sentiment Tagging** | Auto-detect emotional context (positive, negative, urgent, strategic, financial) |
 | **Temporal Reasoning** | Query by date, date ranges, build chronological narratives |
