@@ -1,0 +1,6 @@
+
+[all]
+openai>=1.0
+
+[embeddings]
+openai>=1.0

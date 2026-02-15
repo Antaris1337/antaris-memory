@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "antaris-memory"
+version = "0.1.0"
+description = "Human-like memory for AI agents. Patent pending."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Antaris Analytics", email = "moro@antarisanalytics.ai"}
+]
+keywords = ["ai", "memory", "agents", "llm", "persistence", "recall"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/Antaris1337/antaris-memory"
+Documentation = "https://memory.antarisanalytics.ai"
+Repository = "https://github.com/Antaris1337/antaris-memory"
+
+[project.optional-dependencies]
+embeddings = ["openai>=1.0"]
+all = ["openai>=1.0"]
+
+[tool.setuptools.packages.find]
+include = ["antaris_memory*"]
