@@ -1,6 +1,6 @@
 # 🧠 Antaris Memory
 
-**Persistent memory for AI agents. Zero dependencies. Just files.**
+**File-based persistent memory for AI agents. Zero dependencies.**
 
 Store, search, decay, and consolidate agent memories using only the Python standard library. No vector databases, no infrastructure, no API keys required.
 
@@ -23,8 +23,16 @@ Store, search, decay, and consolidate agent memories using only the Python stand
 - **Not a knowledge graph** — it's a flat memory store with metadata
 - **Not magic** — memory quality depends on what you feed it
 - **Not LLM-dependent** — everything is deterministic keyword/pattern matching. Zero API calls, zero tokens
-- **Will not detect semantic contradictions phrased differently** — contradiction detection compares normalized statements and flags conflicts when mutually exclusive assertions share the same subject. It's rule-based, not semantic
+- **Will not detect semantic contradictions phrased differently** — contradiction detection is deterministic and rule-based. Memories are normalized into structured statements and compared using explicit conflict rules. Only directly incompatible assertions sharing the same subject are flagged. No embeddings, no model inference
 - **No network calls** — runs fully offline, never phones home
+
+## Design Goals
+
+- **Deterministic behavior** — same input always produces same output
+- **Fully offline operation** — no network calls, no API keys, no phoning home
+- **Minimal surface area** — one class (`MemorySystem`), obvious methods
+- **No hidden background processes** — consolidation and synthesis run only when you call them
+- **Transparent storage** — plain JSON files you can inspect with any text editor
 
 ## The Problem
 
@@ -220,9 +228,9 @@ mem = MemorySystem(
 
 ## Zero Dependencies
 
-Antaris Memory uses only Python standard library. No numpy, no torch, no API keys required.
+Antaris Memory uses only the Python standard library. No numpy, no torch, no API keys required.
 
-**Optional:** Install `openai` for embedding-based semantic search (planned for a future release).
+Optional integrations (LLMs, embeddings, etc.) are deliberately excluded from the core package to preserve deterministic behavior and eliminate runtime/network requirements. Embedding-based semantic search is planned as an optional extra in a future release.
 
 ## Comparison
 
