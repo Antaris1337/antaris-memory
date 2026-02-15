@@ -195,7 +195,3 @@ Antaris Memory uses only Python standard library. No numpy, no torch, no API key
 
 Apache 2.0 — free for personal and commercial use.
 
-## Built by
-
-**Antaris Analytics**  
-🌐 [antarisanalytics.ai](https://antarisanalytics.ai)
