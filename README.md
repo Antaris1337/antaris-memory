@@ -163,13 +163,15 @@ All state is stored in a single `memory_metadata.json` file:
 
 Deletions are logged to `memory_audit.json` for compliance.
 
+Storage format may evolve between versions. Breaking changes will increment MAJOR version. See [CHANGELOG](CHANGELOG.md).
+
 ## Architecture
 
 ```
 MemorySystem
 ├── InputGate          — P0-P3 classification at intake
 ├── DecayEngine        — Ebbinghaus forgetting curves
-├── SentimentTagger    — Keyword-based sentiment detection
+├── SentimentTagger    — Rule-based keyword tone tagging
 ├── TemporalEngine     — Date queries and narrative building
 ├── ConfidenceEngine   — Reliability scoring
 ├── CompressionEngine  — Old file summarization
@@ -177,6 +179,8 @@ MemorySystem
 ├── ConsolidationEngine — Dedup, clustering, contradiction detection
 └── KnowledgeSynthesizer — Gap identification and research integration
 ```
+
+**Data flow:** `ingest → classify (P0-P3) → normalize → persist → search → decay-weight → return`
 
 ## Zero Dependencies
 
@@ -190,7 +194,7 @@ The core package uses only the Python standard library. Optional integrations (L
 | Knowledge synthesis | ✅ | ❌ | ❌ | ❌ |
 | No database required | ✅ | ❌ | ❌ | ❌ |
 | Memory decay | ✅ Ebbinghaus | ❌ | ❌ | ⚠️ Temporal graphs |
-| Sentiment tagging | ✅ Keyword | ❌ | ❌ | ✅ |
+| Tone tagging | ✅ Rule-based keywords | ❌ | ❌ | ✅ NLP |
 | Temporal queries | ✅ | ❌ | ❌ | ✅ |
 | Contradiction detection | ✅ Rule-based | ❌ | ❌ | ⚠️ Fact evolution |
 | Selective forgetting | ✅ With audit | ❌ | ⚠️ Invalidation | ⚠️ Invalidation |
