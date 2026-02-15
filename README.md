@@ -195,14 +195,7 @@ Antaris Memory uses only Python standard library. No numpy, no torch, no API key
 
 Apache 2.0 — free for personal and commercial use.
 
-The underlying technology is protected by US Patent Application #63/983,397 (pending). Commercial products that implement the patented methods require a commercial license from Antaris Analytics.
-
 ## Built by
 
-**Antaris Analytics** — AI memory intelligence  
-📧 moro@antarisanalytics.ai  
+**Antaris Analytics**  
 🌐 [antarisanalytics.ai](https://antarisanalytics.ai)
-
----
-
-*"We gave AI agents human-like memory for $5/year."*
