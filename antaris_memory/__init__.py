@@ -1,5 +1,5 @@
 """
-Antaris Memory — Human-like memory for AI agents.
+Antaris Memory — File-based persistent memory for AI agents.
 
 
 Give your AI agents persistent memory that decays, reinforces,
