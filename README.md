@@ -180,15 +180,16 @@ Antaris Memory uses only Python standard library. No numpy, no torch, no API key
 
 | Feature | Antaris Memory | LangChain Memory | Mem0 | Zep |
 |---------|---------------|-----------------|------|-----|
-| Memory decay curves | ✅ | ❌ | ❌ | ❌ |
-| Emotional tagging | ✅ | ❌ | ❌ | ❌ |
-| Temporal reasoning | ✅ | ❌ | ❌ | ❌ |
-| Contradiction detection | ✅ | ❌ | ❌ | ❌ |
-| Selective forgetting | ✅ | ❌ | ❌ | ❌ |
-| Dream state consolidation | ✅ | ❌ | ❌ | ❌ |
-| Zero dependencies | ✅ | ❌ | ❌ | ❌ |
-| Cost per year | <$5 | $500+ | $500+ | $1000+ |
-| Patent protected | ✅ | ❌ | ❌ | ❌ |
+| Input gating (P0-P3) | ✅ | ❌ | ❌ | ❌ |
+| Autonomous knowledge synthesis | ✅ | ❌ | ❌ | ❌ |
+| No database required | ✅ | ❌ | ❌ | ❌ |
+| Memory decay curves | ✅ | ❌ | ❌ | ⚠️ Partial |
+| Emotional tagging | ✅ | ❌ | ❌ | ✅ |
+| Temporal reasoning | ✅ | ❌ | ❌ | ✅ |
+| Contradiction detection | ✅ | ❌ | ❌ | ⚠️ Partial |
+| Selective forgetting | ✅ | ❌ | ⚠️ Partial | ⚠️ Partial |
+| Self-hosted cost | Free | Free | Free (OSS) | Free (OSS) |
+| Patent pending | ✅ | ❌ | ❌ | ❌ |
 
 ## License
 
