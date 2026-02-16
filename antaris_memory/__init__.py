@@ -99,4 +99,8 @@ __all__ = [
     "LockTimeout",
     "VersionTracker",
     "ConflictError",
+    
+    # Search (v1.0)
+    "SearchEngine",
+    "SearchResult",
 ]

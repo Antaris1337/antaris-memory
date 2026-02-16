@@ -259,12 +259,12 @@ Measured on Apple M4, Python 3.14 (beta). Results on Python 3.9–3.13 will be c
 
 | Memories | Ingest | Search (avg) | Search (p99) |
 |----------|--------|-------------|-------------|
-| 100 | 7.4ms (0.074ms/entry) | 0.57ms | 0.95ms |
-| 500 | 25.3ms (0.051ms/entry) | 2.31ms | 3.59ms |
-| 1,000 | 49.0ms (0.049ms/entry) | 4.63ms | 7.28ms |
-| 5,000 | 251.2ms (0.050ms/entry) | 23.5ms | 37.2ms |
+| 100 | 5.3ms (0.053ms/entry) | 0.40ms | 0.65ms |
+| 500 | 16.8ms (0.034ms/entry) | 1.70ms | 2.51ms |
+| 1,000 | 33.2ms (0.033ms/entry) | 3.43ms | 5.14ms |
+| 5,000 | 173.7ms (0.035ms/entry) | 17.10ms | 25.70ms |
 
-*v1.0 search uses BM25 scoring (slightly slower than v0.4's keyword matching, but with proper relevance ranking).*
+*v1.0 search uses BM25 scoring with IDF weighting, field boosting, and length normalization.*
 
 Input gating (P0–P3 classification): **0.177ms avg** per input.
 
@@ -334,6 +334,8 @@ MemorySystem (v1.0)
 ```
 
 **Data flow:** `ingest → classify (P0-P3) → normalize → shard-route → index → persist → search (index lookup) → decay-weight → return`
+
+**Module notes:** `core_v4.py` (imported as `MemorySystem`) is the production path — sharded storage, indexes, BM25 search. `core.py` is the legacy single-file implementation, kept for backward compatibility (`from antaris_memory.core import MemorySystem as LegacyMemorySystem`). New code should always use the default import.
 
 ## Works With Local Models (Ollama)
 
