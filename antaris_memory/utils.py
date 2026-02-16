@@ -11,8 +11,9 @@ logger = logging.getLogger("antaris_memory")
 def atomic_write_json(path: str, data: dict, indent: int = 2) -> None:
     """Write JSON atomically using tmp file + os.replace.
     
-    Prevents data corruption from interrupted writes or concurrent access.
-    The write either fully completes or doesn't happen at all.
+    Prevents torn/partial writes from crashes or interrupted I/O.
+    Does NOT prevent lost updates from concurrent writers — use file
+    locking (planned for v0.5) if multiple processes write the same file.
     """
     dir_path = os.path.dirname(path) or "."
     os.makedirs(dir_path, exist_ok=True)
@@ -24,8 +25,16 @@ def atomic_write_json(path: str, data: dict, indent: int = 2) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_path, path)
+        # Best-effort directory fsync for crash-consistent rename on POSIX
+        try:
+            dir_fd = os.open(dir_path, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except (OSError, AttributeError):
+            pass  # Windows or unsupported — rename is still atomic
     except BaseException:
-        # Clean up temp file on any failure
         try:
             os.unlink(tmp_path)
         except OSError:

@@ -1,6 +1,6 @@
 # Antaris Memory
 
-**Production-ready file-based persistent memory for AI agents. Zero dependencies.**
+**Production-ready file-based persistent memory for AI agents. Zero dependencies (core).**
 
 Store, search, decay, and consolidate agent memories using only the Python standard library. Sharded storage for scalability, fast search indexes, automatic schema migration. No vector databases, no infrastructure, no API keys.
 
