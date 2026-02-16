@@ -40,6 +40,7 @@ from .sharding import ShardManager
 from .migration import MigrationManager
 from .indexing import IndexManager
 from .search import SearchEngine, SearchResult
+from .utils import atomic_write_json
 
 # Default tags to auto-extract
 _DEFAULT_TAG_TERMS = [
@@ -169,8 +170,7 @@ class MemorySystemV4:
             "format": "legacy",
             "memories": [m.to_dict() for m in self.memories],
         }
-        with open(self.legacy_metadata_path, "w") as f:
-            json.dump(data, f, indent=2)
+        atomic_write_json(self.legacy_metadata_path, data)
         return self.legacy_metadata_path
 
     def load(self) -> int:
@@ -359,6 +359,7 @@ class MemorySystemV4:
             
             self.memories.append(entry)
             self._hashes.add(entry.hash)
+            self.search_engine.mark_dirty()
             
             # Add to indexes if enabled
             if self.use_indexing and self.index_manager:
@@ -470,6 +471,7 @@ class MemorySystemV4:
         
         self.memories = consolidated_memories
         self._hashes = {m.hash for m in self.memories}
+        self.search_engine.mark_dirty()
         
         # Rebuild indexes after compaction
         if self.use_indexing and self.index_manager:
@@ -593,12 +595,17 @@ class MemorySystemV4:
         if "removed" in result:
             removed_set = set(m.hash for m in result["removed"])
             self.memories = [m for m in self.memories if m.hash not in removed_set]
+            self.search_engine.mark_dirty()
             # Log to audit
             for m in result["removed"]:
                 self._append_audit({"action": "forget", "hash": m.hash,
                                     "content_preview": m.content[:50],
                                     "timestamp": datetime.now().isoformat()})
         return result
+
+    def reindex(self) -> None:
+        """Force a full search index rebuild."""
+        self.search_engine.reindex(self.memories)
 
     def consolidate(self) -> Dict:
         """Run consolidation: dedup, clustering, contradiction detection."""
@@ -633,8 +640,7 @@ class MemorySystemV4:
             with open(self.audit_path) as f:
                 audit = json.load(f)
         audit.append(entry)
-        with open(self.audit_path, "w") as f:
-            json.dump(audit, f, indent=2)
+        atomic_write_json(self.audit_path, audit)
 
 
 # Backward compatibility alias

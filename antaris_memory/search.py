@@ -208,9 +208,12 @@ class SearchEngine:
             
             score += idf * tf_norm
         
-        # Exact phrase bonus (query appears as substring)
-        if len(query_tokens) > 1 and query_lower in content_lower:
-            score *= 1.5
+        # Exact phrase bonus (query tokens appear consecutively in content tokens)
+        if len(query_tokens) > 1:
+            content_token_str = " ".join(content_tokens)
+            query_token_str = " ".join(query_tokens)
+            if query_token_str in content_token_str:
+                score *= 1.5
         
         # Field boosting: check tags (at most one 1.2x boost per entry)
         if hasattr(mem, 'tags') and mem.tags:
