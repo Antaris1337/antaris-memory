@@ -9,6 +9,15 @@ Store, search, decay, and consolidate agent memories using only the Python stand
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
+## What's New in v0.4.0
+
+- **Sharded storage** — memories split across date/topic files instead of a single JSON blob
+- **Fast search indexes** — full-text inverted index, tag index, date index (10-100x faster search)
+- **Automatic schema migration** — v0.2/v0.3 data migrates on first load with backup and rollback
+- **Sub-10ms search at 10K memories** — see [benchmarks](#benchmarks) below
+
+See [CHANGELOG.md](CHANGELOG.md) for full version history.
+
 ## What It Does
 
 - **Sharded storage** for production scalability (10,000+ memories, sub-second search)
@@ -16,27 +25,17 @@ Store, search, decay, and consolidate agent memories using only the Python stand
 - **Automatic schema migration** from single-file to sharded format with rollback
 - **Multi-agent shared memory** pools with namespace isolation and access controls
 - Retrieval weighted by **recency × importance × access frequency** ([Ebbinghaus-inspired](https://en.wikipedia.org/wiki/Forgetting_curve) decay)
-- Classifies incoming information by priority (P0–P3) and drops ephemeral content at intake
+- **[Input gating](#input-gating-p0p3)** classifies incoming content by priority (P0–P3) and drops ephemeral noise at intake
 - Detects contradictions between stored memories using deterministic rule-based comparison
 - Runs fully offline — zero network calls, zero tokens, zero API keys
 
-## v0.4 Performance
-
-**Single-file format (v0.2/v0.3)**:
-- Search: 50-500ms for 1,000 memories (scans all)
-- Storage: Single JSON file, memory usage scales linearly
-
-**Sharded format (v0.4)**:
-- Search: 1-10ms for 10,000 memories (index lookup)
-- Storage: Multiple shards by date/topic, constant memory usage
-- Migration: Automatic on first load with backup and rollback
-
 ## What It Doesn't Do
 
-- **Not a vector database** — no embeddings (optional embedding support planned)
-- **Not a knowledge graph** — flat memory store with metadata indexing
-- **Not semantic** — contradiction detection compares normalized statements using explicit conflict rules, not inference. It will not catch contradictions phrased differently.
+- **Not a vector database** — no embeddings. Search uses TF-IDF-style keyword matching on an inverted index, not semantic similarity. If you need "find memories *similar in meaning*," this isn't the right tool yet.
+- **Not a knowledge graph** — flat memory store with metadata indexing. No entity relationships or graph traversal.
+- **Not semantic** — contradiction detection compares normalized statements using explicit conflict rules (negation, numeric disagreement), not inference. It will not catch contradictions phrased differently.
 - **Not LLM-dependent** — all operations are deterministic. No model calls, no prompt engineering.
+- **Not infinitely scalable** — JSON file storage works well up to ~50,000 memories per workspace. Beyond that, you'll want a database. We're honest about this because we'd rather you succeed than discover limits in production.
 
 ## Design Goals
 
@@ -82,14 +81,18 @@ mem.forget(before_date="2025-01-01")
 
 # Background consolidation
 report = mem.consolidate()
-# → duplicates found, topic clusters, contradictions, archive suggestions
 
 mem.save()
 ```
 
+More examples in the [`examples/`](examples/) directory:
+- [`quickstart.py`](examples/quickstart.py) — basic usage
+- [`openclaw_integration.py`](examples/openclaw_integration.py) — OpenClaw agent integration
+- [`langchain_integration.py`](examples/langchain_integration.py) — LangChain memory backend
+
 ## Input Gating (P0–P3)
 
-Classify content at intake. Low-value data never enters storage.
+**Input gating** classifies content at intake by priority level. Low-value data (greetings, filler, acknowledgments) never enters storage, keeping memory clean without manual curation.
 
 ```python
 mem.ingest_with_gating("CRITICAL: API key compromised", source="alerts")
@@ -109,9 +112,11 @@ mem.ingest_with_gating("thanks for the update!", source="chat")
 | P2 | Tactical | ✅ | Background info, research, general discussion |
 | P3 | — | ❌ | Greetings, acknowledgments, filler |
 
+Classification uses keyword and pattern matching — no LLM calls. It's fast (0.177ms avg) but not perfect. Edge cases exist; when in doubt, it errs toward storing.
+
 ## Knowledge Synthesis
 
-Identify gaps in stored knowledge and integrate new research.
+**Knowledge synthesis** identifies gaps in stored knowledge and integrates new research. It scans existing memories for topics mentioned frequently but lacking detail, then suggests targeted research.
 
 ```python
 # What does the agent not know enough about?
@@ -134,7 +139,7 @@ score = importance × 2^(-age / half_life) + reinforcement
 
 - Fresh memories score high
 - Unused memories decay toward zero
-- Accessed memories are automatically reinforced
+- Accessed memories are automatically reinforced (each search hit boosts the score)
 - Below-threshold memories are candidates for compression
 
 ## Consolidation
@@ -145,10 +150,44 @@ Run periodically to maintain memory health:
 report = mem.consolidate()
 ```
 
-- Finds and merges near-duplicate memories
-- Discovers topic clusters
-- Flags contradictions (deterministic, rule-based)
-- Suggests memories for archival
+**Sample output** (10 memories, 2 near-duplicates, 3 topic clusters):
+
+```json
+{
+  "timestamp": "2026-02-16T02:23:58",
+  "total": 10,
+  "active": 10,
+  "archive_candidates": 0,
+  "duplicates": 0,
+  "clusters": 3,
+  "contradictions": 0,
+  "top_clusters": {
+    "postgresql": ["4d8c1f76", "9178bfd3"],
+    "cost": ["a0811e1b", "5b42672b"],
+    "$500": ["a0811e1b", "5b42672b"]
+  }
+}
+```
+
+- Finds and merges near-duplicate memories (e.g., "Chose PostgreSQL" and "PostgreSQL selected as database")
+- Discovers topic clusters (memories that reference the same subjects)
+- Flags contradictions (e.g., "API costs are reasonable" vs "API costs too much" — when phrased with explicit negation)
+- Suggests memories for archival (old, low-importance, rarely accessed)
+
+## Benchmarks
+
+Measured on Apple M4, Python 3.14. Reproducible via `scripts/ollama_benchmark.py`.
+
+| Memories | Ingest | Search (avg) | Search (p99) | Consolidate | Disk |
+|----------|--------|-------------|-------------|-------------|------|
+| 100 | 1.0ms (0.010ms/entry) | 0.35ms | 0.40ms | 2.6ms | 46KB |
+| 500 | 4.4ms (0.009ms/entry) | 1.55ms | 1.83ms | 51ms | 230KB |
+| 1,000 | 7.1ms (0.007ms/entry) | 2.69ms | 3.20ms | 195ms | 460KB |
+| 5,000 | 36.8ms (0.007ms/entry) | 13.8ms | 16.2ms | 354ms | 2.3MB |
+
+Input gating (P0–P3 classification): **0.177ms avg** per input.
+
+**Scaling notes:** JSON file storage is practical up to ~50,000 memories per workspace. At that scale, expect ~50-100ms search and ~50MB on disk. Beyond that, consider sharding across multiple workspaces or migrating to a database. We chose this limit deliberately — most agent workloads generate hundreds to low thousands of memories, not millions.
 
 ## Storage Format
 
@@ -223,18 +262,17 @@ mem.ingest_with_gating("Meeting notes from standup", source="daily")
 results = mem.search("standup decisions")
 ```
 
-**Benchmarks** (Apple M4, Python 3.14):
-
-| Memories | Ingest | Search (avg) | Search (p99) | Consolidate | Disk |
-|----------|--------|-------------|-------------|-------------|------|
-| 100 | 1.0ms (0.010ms/entry) | 0.35ms | 0.40ms | 2.6ms | 46KB |
-| 500 | 4.4ms (0.009ms/entry) | 1.55ms | 1.83ms | 51ms | 230KB |
-| 1,000 | 7.1ms (0.007ms/entry) | 2.69ms | 3.20ms | 195ms | 460KB |
-| 5,000 | 36.8ms (0.007ms/entry) | 13.8ms | 16.2ms | 354ms | 2.3MB |
-
-Input gating (P0–P3 classification): **0.177ms avg** per input.
-
 On a Mac Mini (32GB) running Ollama for inference and antaris-memory for persistence, your entire agent stack runs locally. On a Mac Studio (256GB), you can run 70B+ models alongside thousands of indexed memories with sub-millisecond lookups.
+
+## Running Tests
+
+```bash
+git clone https://github.com/Antaris-Analytics/antaris-memory.git
+cd antaris-memory
+python -m pytest tests/ -v
+```
+
+All 44 tests pass with zero external dependencies. No test fixtures, no mocking libraries, no network access.
 
 ## Zero Dependencies
 
@@ -242,17 +280,26 @@ The core package uses only the Python standard library. Optional integrations (L
 
 ## Comparison
 
-| | Antaris Memory | LangChain Memory | Mem0 | Zep |
+| | Antaris Memory | [LangChain Memory](https://python.langchain.com/docs/modules/memory/) | [Mem0](https://github.com/mem0ai/mem0) | [Zep](https://github.com/getzep/zep) |
 |---|---|---|---|---|
-| Input gating | ✅ P0-P3 | ❌ | ❌ | ❌ |
-| Knowledge synthesis | ✅ | ❌ | ❌ | ❌ |
+| Input gating | ✅ [P0-P3](#input-gating-p0p3) | ❌ | ❌ | ❌ |
+| Knowledge synthesis | ✅ [Gap detection](#knowledge-synthesis) | ❌ | ❌ | ❌ |
 | No database required | ✅ | ❌ | ❌ | ❌ |
-| Memory decay | ✅ Ebbinghaus | ❌ | ❌ | ⚠️ Temporal graphs |
+| Memory decay | ✅ [Ebbinghaus](#memory-decay) | ❌ | ❌ | ⚠️ Temporal graphs |
 | Tone tagging | ✅ Rule-based keywords | ❌ | ❌ | ✅ NLP |
 | Temporal queries | ✅ | ❌ | ❌ | ✅ |
-| Contradiction detection | ✅ Rule-based | ❌ | ❌ | ⚠️ Fact evolution |
+| Contradiction detection | ✅ [Rule-based](#consolidation) | ❌ | ❌ | ⚠️ Fact evolution |
 | Selective forgetting | ✅ With audit | ❌ | ⚠️ Invalidation | ⚠️ Invalidation |
 | Infrastructure needed | None | Redis/PG | Vector + KV + Graph | PostgreSQL + Vector |
+
+**Honest caveat:** LangChain, Mem0, and Zep offer features we don't — embeddings-based semantic search, graph relationships, real-time sync. They require more infrastructure but may be the right choice if you need those capabilities. Antaris Memory is for teams that want a simple, transparent, offline-first memory primitive.
+
+## Part of the Antaris Analytics Suite
+
+- **antaris-memory** — Persistent memory for AI agents (this package)
+- **[antaris-router](https://pypi.org/project/antaris-router/)** — Adaptive model routing with outcome learning
+- **antaris-guard** — Security and prompt injection detection (coming soon)
+- **antaris-context** — Context window optimization (coming soon)
 
 ## License
 
