@@ -600,7 +600,7 @@ class MemorySystemV4:
 
     def consolidate(self) -> Dict:
         """Run consolidation: dedup, clustering, contradiction detection."""
-        return self.consolidation.consolidate(self.memories)
+        return self.consolidation.run(self.memories)
 
     def compress_old(self, days: int = 7) -> list:
         """Compress memories older than N days."""

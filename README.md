@@ -257,12 +257,12 @@ To opt out of locking for single-process workloads: `atomic_write_json(path, dat
 
 Measured on Apple M4, Python 3.14 (beta). Results on Python 3.9–3.13 will be comparable — no version-specific optimizations are used. Reproducible via [`scripts/ollama_benchmark.py`](scripts/ollama_benchmark.py).
 
-| Memories | Ingest | Search (avg) | Search (p99) |
-|----------|--------|-------------|-------------|
-| 100 | 5.3ms (0.053ms/entry) | 0.40ms | 0.65ms |
-| 500 | 16.8ms (0.034ms/entry) | 1.70ms | 2.51ms |
-| 1,000 | 33.2ms (0.033ms/entry) | 3.43ms | 5.14ms |
-| 5,000 | 173.7ms (0.035ms/entry) | 17.10ms | 25.70ms |
+| Memories | Ingest | Search (avg) | Search (p99) | Consolidate | Disk |
+|----------|--------|-------------|-------------|-------------|------|
+| 100 | 5.3ms (0.053ms/entry) | 0.40ms | 0.65ms | 4.2ms | 117KB |
+| 500 | 16.8ms (0.034ms/entry) | 1.70ms | 2.51ms | 84.3ms | 575KB |
+| 1,000 | 33.2ms (0.033ms/entry) | 3.43ms | 5.14ms | 343.3ms | 1.1MB |
+| 5,000 | 173.7ms (0.035ms/entry) | 17.10ms | 25.70ms | 4.3s | 5.6MB |
 
 *v1.0 search uses BM25 scoring with IDF weighting, field boosting, and length normalization.*
 
