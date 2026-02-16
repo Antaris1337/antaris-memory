@@ -5,7 +5,7 @@
 Store, search, decay, and consolidate agent memories using only the Python standard library. Sharded storage for scalability, fast search indexes, automatic schema migration. No vector databases, no infrastructure, no API keys.
 
 [![PyPI](https://img.shields.io/pypi/v/antaris-memory)](https://pypi.org/project/antaris-memory/)
-[![Tests](https://img.shields.io/badge/tests-44%20passing-brightgreen)](https://github.com/Antaris-Analytics/antaris-memory)
+[![Tests](https://github.com/Antaris-Analytics/antaris-memory/actions/workflows/tests.yml/badge.svg)](https://github.com/Antaris-Analytics/antaris-memory/actions/workflows/tests.yml)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
@@ -176,7 +176,7 @@ report = mem.consolidate()
 
 ## Benchmarks
 
-Measured on Apple M4, Python 3.14. Reproducible via `scripts/ollama_benchmark.py`.
+Measured on Apple M4, Python 3.14 (beta). Results on Python 3.9–3.13 will be comparable — no version-specific optimizations are used. Reproducible via [`scripts/ollama_benchmark.py`](scripts/ollama_benchmark.py).
 
 | Memories | Ingest | Search (avg) | Search (p99) | Consolidate | Disk |
 |----------|--------|-------------|-------------|-------------|------|
