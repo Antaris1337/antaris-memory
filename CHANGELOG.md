@@ -6,7 +6,7 @@
 - **BM25-inspired search** (`SearchEngine`): Proper relevance ranking with term frequency, inverse document frequency, field boosting, and length normalization
 - **SearchResult** dataclass with `relevance` (0.0-1.0 normalized), `matched_terms`, and `explanation`
 - **Stopword filtering**: 100+ English stopwords excluded from scoring for cleaner results
-- **Exact phrase boost**: Queries appearing as substrings get 1.5x score multiplier
+- **Exact phrase boost**: Token-sequence phrase match gets 1.5x score multiplier
 - **Field boosting**: Tag matches (1.2x) and source matches (1.1x) improve ranking
 - **Decay-weighted ranking**: Recent/frequently-accessed memories score higher
 - **`explain=True` mode**: Returns SearchResult objects with full scoring breakdown

@@ -17,11 +17,9 @@ Usage:
 
 __version__ = "1.0.0"
 
-# Import v0.4 system by default
+# Core
 from antaris_memory.core_v4 import MemorySystemV4 as MemorySystem
 from antaris_memory.entry import MemoryEntry
-
-# Core engines (unchanged from v0.3)
 from antaris_memory.decay import DecayEngine
 from antaris_memory.sentiment import SentimentTagger
 from antaris_memory.temporal import TemporalEngine
@@ -32,19 +30,19 @@ from antaris_memory.consolidation import ConsolidationEngine
 from antaris_memory.gating import InputGate
 from antaris_memory.synthesis import KnowledgeSynthesizer
 
-# Multi-agent system (v0.3 feature)
+# Multi-agent
 from antaris_memory.shared import SharedMemoryPool, AgentPermission
 
-# New v0.4 systems
+# Storage
 from antaris_memory.sharding import ShardManager, ShardKey
 from antaris_memory.migration import MigrationManager, Migration
 from antaris_memory.indexing import IndexManager, SearchIndex, TagIndex, DateIndex
 
-# v0.5: Concurrency
+# Concurrency
 from antaris_memory.locking import FileLock, LockTimeout
 from antaris_memory.versioning import VersionTracker, ConflictError
 
-# v1.0: Search
+# Search
 from antaris_memory.search import SearchEngine, SearchResult
 
 # Backward compatibility - import legacy core if needed

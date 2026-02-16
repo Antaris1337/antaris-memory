@@ -198,7 +198,7 @@ report = mem.consolidate()
 
 ## Concurrency
 
-Multiple processes can safely read and write to the same memory workspace.
+Multiple processes can safely read and write to the same memory workspace. Concurrency guarantees apply to writers using Antaris Memory's locking utilities. If external tools modify workspace files without respecting locks, correctness is not guaranteed.
 
 ### File Locking
 
