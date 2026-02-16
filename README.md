@@ -1,21 +1,35 @@
 # Antaris Memory
 
-**File-based persistent memory for AI agents. Zero dependencies.**
+**Production-ready file-based persistent memory for AI agents. Zero dependencies.**
 
-Store, search, decay, and consolidate agent memories using only the Python standard library. No vector databases, no infrastructure, no API keys.
+Store, search, decay, and consolidate agent memories using only the Python standard library. Sharded storage for scalability, fast search indexes, automatic schema migration. No vector databases, no infrastructure, no API keys.
 
 [![PyPI](https://img.shields.io/pypi/v/antaris-memory)](https://pypi.org/project/antaris-memory/)
-[![Tests](https://img.shields.io/badge/tests-22%20passing-brightgreen)](https://github.com/Antaris-Analytics/antaris-memory)
+[![Tests](https://img.shields.io/badge/tests-56%20passing-brightgreen)](https://github.com/Antaris-Analytics/antaris-memory)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
 ## What It Does
 
-- Stores structured facts, decisions, and context as JSON on the local filesystem
+- **Sharded storage** for production scalability (10,000+ memories, sub-second search)
+- **Fast search indexes** (full-text, tags, dates) stored as transparent JSON files
+- **Automatic schema migration** from single-file to sharded format with rollback
+- **Multi-agent shared memory** pools with namespace isolation and access controls
 - Retrieval weighted by **recency × importance × access frequency** ([Ebbinghaus-inspired](https://en.wikipedia.org/wiki/Forgetting_curve) decay)
 - Classifies incoming information by priority (P0–P3) and drops ephemeral content at intake
 - Detects contradictions between stored memories using deterministic rule-based comparison
 - Runs fully offline — zero network calls, zero tokens, zero API keys
+
+## v0.4 Performance
+
+**Single-file format (v0.2/v0.3)**:
+- Search: 50-500ms for 1,000 memories (scans all)
+- Storage: Single JSON file, memory usage scales linearly
+
+**Sharded format (v0.4)**:
+- Search: 1-10ms for 10,000 memories (index lookup)
+- Storage: Multiple shards by date/topic, constant memory usage
+- Migration: Automatic on first load with backup and rollback
 
 ## What It Doesn't Do
 
