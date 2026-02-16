@@ -28,6 +28,7 @@ from .compression import CompressionEngine
 from .forgetting import ForgettingEngine
 from .consolidation import ConsolidationEngine
 from .gating import InputGate
+from .search import SearchEngine, SearchResult
 from .synthesis import KnowledgeSynthesizer
 
 # Default tags to auto-extract
@@ -70,6 +71,7 @@ class MemorySystem:
         self.consolidation = ConsolidationEngine(decay=self.decay)
         self.gating = InputGate()
         self.synthesis = KnowledgeSynthesizer()
+        self.search_engine = SearchEngine()
 
         # Tag terms
         self._tag_terms = list(set(_DEFAULT_TAG_TERMS + (tag_terms or [])))
@@ -100,6 +102,9 @@ class MemorySystem:
             data = json.load(f)
         self.memories = [MemoryEntry.from_dict(d) for d in data.get("memories", [])]
         self._hashes = {m.hash for m in self.memories}
+        # Build search index for BM25 ranking
+        if self.memories:
+            self.search_engine.build_index(self.memories)
         return len(self.memories)
 
     # ── ingestion ───────────────────────────────────────────────────────
@@ -202,41 +207,53 @@ class MemorySystem:
         category: str = None,
         min_confidence: float = 0.0,
         sentiment_filter: str = None,
-    ) -> List[MemoryEntry]:
-        """Search memories. Results weighted by relevance × decay score."""
-        q = query.lower()
-        q_words = set(re.findall(r"\w{3,}", q))
-        results = []
-
-        for m in self.memories:
-            if category and m.category != category:
-                continue
-            if min_confidence and m.confidence < min_confidence:
-                continue
-            if sentiment_filter and sentiment_filter not in m.sentiment:
-                continue
-
-            c = m.content.lower()
-            score = 0.0
-            if q in c:
-                score += 3.0
-            else:
-                c_words = set(re.findall(r"\w{3,}", c))
-                overlap = len(q_words & c_words) / max(len(q_words), 1)
-                score += overlap * 2.0
-
-            tag_hits = sum(1 for t in m.tags if q in t.lower())
-            score += tag_hits * 0.5
-
-            decay_score = self.decay.score(m)
-            score *= (0.5 + decay_score)
-
-            if score > 0.3:
-                results.append((m, score))
-                self.decay.reinforce(m)
-
-        results.sort(key=lambda x: x[1], reverse=True)
-        return [m for m, _ in results[:limit]]
+        explain: bool = False,
+    ) -> list:
+        """Search memories using BM25-inspired ranking.
+        
+        Results are ranked by term relevance × inverse document frequency × decay.
+        Scores are normalized to 0.0-1.0 range.
+        
+        Args:
+            query: Search query string
+            limit: Maximum results
+            category: Filter by category
+            min_confidence: Minimum relevance score (0.0-1.0)
+            sentiment_filter: Filter by sentiment tag
+            explain: If True, return SearchResult objects with explanations.
+                     If False (default), return MemoryEntry objects for backward compat.
+        
+        Returns:
+            List of MemoryEntry (default) or SearchResult (if explain=True),
+            sorted by relevance descending.
+        """
+        # Filter by sentiment first if needed
+        memories = self.memories
+        if sentiment_filter:
+            memories = [m for m in memories if sentiment_filter in m.sentiment]
+        
+        search_results = self.search_engine.search(
+            query=query,
+            memories=memories,
+            limit=limit,
+            category=category,
+            min_score=min_confidence,
+            decay_fn=self.decay.score,
+        )
+        
+        # Reinforce accessed memories
+        for r in search_results:
+            self.decay.reinforce(r.entry)
+        
+        if explain:
+            return search_results
+        
+        # Backward compat: update entry confidence with search relevance and return entries
+        entries = []
+        for r in search_results:
+            r.entry.confidence = r.relevance
+            entries.append(r.entry)
+        return entries
 
     # ── temporal queries ────────────────────────────────────────────────
 

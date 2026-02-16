@@ -37,6 +37,7 @@ from .synthesis import KnowledgeSynthesizer
 from .sharding import ShardManager
 from .migration import MigrationManager
 from .indexing import IndexManager
+from .search import SearchEngine, SearchResult
 
 # Default tags to auto-extract
 _DEFAULT_TAG_TERMS = [
@@ -93,6 +94,7 @@ class MemorySystemV4:
         self.consolidation = ConsolidationEngine(decay=self.decay)
         self.gating = InputGate()
         self.synthesis = KnowledgeSynthesizer()
+        self.search_engine = SearchEngine()
 
         # Tag terms
         self._tag_terms = list(set(_DEFAULT_TAG_TERMS + (tag_terms or [])))
@@ -187,6 +189,8 @@ class MemorySystemV4:
         # Load all memories from shards (careful with memory usage)
         self.memories = self.shard_manager.get_all_memories(limit=10000)  # Limit for safety
         self._hashes = {m.hash for m in self.memories}
+        if self.memories:
+            self.search_engine.build_index(self.memories)
         return len(self.memories)
     
     def _load_legacy(self) -> int:
@@ -199,6 +203,8 @@ class MemorySystemV4:
         
         self.memories = [MemoryEntry.from_dict(d) for d in data.get("memories", [])]
         self._hashes = {m.hash for m in self.memories}
+        if self.memories:
+            self.search_engine.build_index(self.memories)
         return len(self.memories)
 
     # ── search with indexing ───────────────────────────────────────────
@@ -212,25 +218,49 @@ class MemorySystemV4:
                use_decay: bool = True,
                category: str = None,
                min_confidence: float = 0.0,
-               sentiment_filter: str = None) -> List[MemoryEntry]:
-        """Search memories using fast indexes when available.
+               sentiment_filter: str = None,
+               explain: bool = False) -> list:
+        """Search memories using BM25-inspired ranking with optional fast indexes.
         
-        Backward-compatible with v0.3 parameters (category, min_confidence, sentiment_filter).
+        v1.0: Uses BM25 scoring with IDF weighting for proper relevance ranking.
+        Backward-compatible with all v0.3/v0.4 parameters.
+        
+        Args:
+            explain: If True, return SearchResult objects with score explanations.
         """
-        if self.use_indexing and self.index_manager:
-            results = self._search_indexed(query, limit * 2 if category else limit, tags, tag_mode, date_range, use_decay)
-        else:
-            results = self._search_legacy(query, limit * 2 if category else limit, use_decay)
+        # Filter by sentiment first
+        memories = self.memories
+        if sentiment_filter:
+            memories = [m for m in memories if hasattr(m, 'sentiment') and m.sentiment and sentiment_filter in m.sentiment]
         
-        # Apply v0.3-compatible filters
-        if category:
-            results = [r for r in results if r.category == category]
-        if min_confidence > 0:
-            results = [r for r in results if r.confidence >= min_confidence]
-        if sentiment_filter and hasattr(results[0] if results else None, 'sentiment'):
-            results = [r for r in results if r.sentiment and sentiment_filter in r.sentiment]
+        # Build search index if not yet built
+        if self.search_engine._doc_count != len(memories):
+            self.search_engine.build_index(memories)
         
-        return results[:limit]
+        # Use BM25 search engine
+        decay_fn = self.decay.score if use_decay else None
+        search_results = self.search_engine.search(
+            query=query,
+            memories=memories,
+            limit=limit,
+            category=category,
+            min_score=min_confidence,
+            decay_fn=decay_fn,
+        )
+        
+        # Reinforce accessed memories
+        for r in search_results:
+            self.decay.reinforce(r.entry)
+        
+        if explain:
+            return search_results
+        
+        # Backward compat: return MemoryEntry with updated confidence
+        entries = []
+        for r in search_results:
+            r.entry.confidence = r.relevance
+            entries.append(r.entry)
+        return entries
     
     def _search_indexed(self, 
                        query: str,

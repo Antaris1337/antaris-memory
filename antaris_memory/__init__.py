@@ -27,7 +27,7 @@ Usage:
     pool.write("agent_1", "Key insight discovered", namespace="research")
 """
 
-__version__ = "0.5.0"
+__version__ = "1.0.0"
 
 # Import v0.4 system by default
 from antaris_memory.core_v4 import MemorySystemV4 as MemorySystem
@@ -55,6 +55,9 @@ from antaris_memory.indexing import IndexManager, SearchIndex, TagIndex, DateInd
 # v0.5: Concurrency
 from antaris_memory.locking import FileLock, LockTimeout
 from antaris_memory.versioning import VersionTracker, ConflictError
+
+# v1.0: Search
+from antaris_memory.search import SearchEngine, SearchResult
 
 # Backward compatibility - import legacy core if needed
 try:

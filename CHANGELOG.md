@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.0] - 2026-02-16
+
+### Added (Search Engine)
+- **BM25-inspired search** (`SearchEngine`): Proper relevance ranking with term frequency, inverse document frequency, field boosting, and length normalization
+- **SearchResult** dataclass with `relevance` (0.0-1.0 normalized), `matched_terms`, and `explanation`
+- **Stopword filtering**: 100+ English stopwords excluded from scoring for cleaner results
+- **Exact phrase boost**: Queries appearing as substrings get 1.5x score multiplier
+- **Field boosting**: Tag matches (1.2x) and source matches (1.1x) improve ranking
+- **Decay-weighted ranking**: Recent/frequently-accessed memories score higher
+- **`explain=True` mode**: Returns SearchResult objects with full scoring breakdown
+- **Index statistics**: `search_engine.stats()` returns vocab size, avg doc length, top terms
+- 18 new search tests, 78 total
+
+### Changed
+- **Search confidence now varies by relevance** — top result scores 1.0, others normalized below. No more wall of 0.50 scores.
+- Search engine auto-builds BM25 index on `load()` and rebuilds when corpus changes
+- Both `core.py` (legacy) and `core_v4.py` (default) use the new search engine
+
+### Why v1.0
+This release marks production-readiness across all core features:
+- Proper search ranking (v1.0: BM25)
+- Concurrent writer safety (v0.5: locking + versioning)
+- Production storage (v0.4: sharding + indexes)
+- Multi-agent support (v0.3: shared pools)
+- Input classification (v0.2: P0-P3 gating)
+- Core primitives (v0.1: decay, sentiment, temporal, consolidation)
+
 ## [0.5.0] - 2026-02-16
 
 ### Added (Concurrency & Safety)

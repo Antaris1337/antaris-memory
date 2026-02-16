@@ -9,12 +9,12 @@ Store, search, decay, and consolidate agent memories using only the Python stand
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
-## What's New in v0.5.0
+## What's New in v1.0.0
 
+- **BM25-inspired search** — proper relevance ranking with IDF weighting. No more wall of 0.50 scores.
 - **File locking** — cross-platform `os.mkdir()`-based locks prevent concurrent writer data loss
 - **Optimistic conflict detection** — mtime/hash tracking catches stale read-modify-write patterns
-- **All writes locked by default** — `atomic_write_json()` now acquires a lock automatically
-- **60 tests** — 20 new concurrency tests including 4-thread race condition verification
+- **78 tests** — comprehensive coverage across search, locking, versioning, and all core features
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -288,13 +288,14 @@ Storage format may evolve between versions. Breaking changes will increment MAJO
 ## Architecture
 
 ```
-MemorySystem (v0.5)
+MemorySystem (v1.0)
 ├── ShardManager       — Distributes memories across date/topic shards
 ├── IndexManager       — Full-text, tag, and date indexes for fast lookup
 │   ├── SearchIndex    — Inverted index for text search
 │   ├── TagIndex       — Tag → memory hash mapping
 │   └── DateIndex      — Date range queries
 ├── MigrationManager   — Schema versioning with backup and rollback
+├── SearchEngine       — BM25-inspired ranking with IDF, phrase boost, field boost
 ├── FileLock           — Cross-platform directory-based file locking
 ├── VersionTracker     — Optimistic conflict detection (mtime/hash)
 ├── InputGate          — P0-P3 classification at intake
