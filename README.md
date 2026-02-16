@@ -403,8 +403,8 @@ The core package uses only the Python standard library — no install-time depen
 
 - **antaris-memory** — Persistent memory for AI agents (this package)
 - **[antaris-router](https://pypi.org/project/antaris-router/)** — Adaptive model routing with outcome learning
-- **antaris-guard** — Security and prompt injection detection (coming soon)
-- **antaris-context** — Context window optimization (coming soon)
+- **[antaris-guard](https://pypi.org/project/antaris-guard/)** — Security and prompt injection detection
+- **[antaris-context](https://pypi.org/project/antaris-context/)** — Context window optimization
 
 ## License
 
