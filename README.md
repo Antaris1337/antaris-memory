@@ -212,6 +212,23 @@ MemorySystem (v0.4)
 
 **Data flow:** `ingest → classify (P0-P3) → normalize → shard-route → index → persist → search (index lookup) → decay-weight → return`
 
+## Works With Local Models (Ollama)
+
+Because antaris-memory is fully offline and deterministic, it pairs naturally with local LLM setups:
+
+```python
+# Use with Ollama (llama3, mistral, etc.) — memory operations cost $0
+mem = MemorySystem("./workspace")
+mem.load()
+
+# All classification, search, decay, and consolidation run locally
+# No tokens consumed, no API calls, no external dependencies
+mem.ingest_with_gating("Meeting notes from standup", source="daily")
+results = mem.search("standup decisions")
+```
+
+Run your agent on a Mac Mini (32GB) or Mac Studio (256GB) with Ollama handling inference and antaris-memory handling persistence — your entire agent stack runs locally at zero marginal cost.
+
 ## Zero Dependencies
 
 The core package uses only the Python standard library. Optional integrations (LLMs, embeddings) are deliberately excluded to preserve deterministic behavior and eliminate runtime requirements.
