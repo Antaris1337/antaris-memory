@@ -8,16 +8,32 @@ import logging
 logger = logging.getLogger("antaris_memory")
 
 
-def atomic_write_json(path: str, data: dict, indent: int = 2) -> None:
-    """Write JSON atomically using tmp file + os.replace.
+def atomic_write_json(path: str, data: dict, indent: int = 2, lock: bool = True) -> None:
+    """Write JSON atomically with optional file locking.
     
     Prevents torn/partial writes from crashes or interrupted I/O.
-    Does NOT prevent lost updates from concurrent writers — use file
-    locking (planned for v0.5) if multiple processes write the same file.
+    When lock=True (default), also prevents lost updates from concurrent writers
+    using a directory-based lock.
+    
+    Args:
+        path: File path to write
+        data: JSON-serializable data
+        indent: JSON indentation
+        lock: If True, acquire a file lock before writing (default: True)
     """
     dir_path = os.path.dirname(path) or "."
     os.makedirs(dir_path, exist_ok=True)
     
+    if lock:
+        from .locking import FileLock
+        with FileLock(path, timeout=30.0):
+            _do_atomic_write(path, data, indent, dir_path)
+    else:
+        _do_atomic_write(path, data, indent, dir_path)
+
+
+def _do_atomic_write(path: str, data, indent: int, dir_path: str) -> None:
+    """Internal: perform the actual atomic write."""
     fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
@@ -40,3 +56,22 @@ def atomic_write_json(path: str, data: dict, indent: int = 2) -> None:
         except OSError:
             pass
         raise
+
+
+def locked_read_json(path: str, default=None):
+    """Read a JSON file with a shared lock to prevent torn reads.
+    
+    Args:
+        path: File path to read
+        default: Value to return if file doesn't exist
+        
+    Returns:
+        Parsed JSON data, or default if file doesn't exist.
+    """
+    if not os.path.exists(path):
+        return default
+    
+    from .locking import FileLock
+    with FileLock(path, timeout=10.0):
+        with open(path) as f:
+            return json.load(f)

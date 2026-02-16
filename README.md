@@ -9,12 +9,12 @@ Store, search, decay, and consolidate agent memories using only the Python stand
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
-## What's New in v0.4.0
+## What's New in v0.5.0
 
-- **Sharded storage** — memories split across date/topic files instead of a single JSON blob
-- **Fast search indexes** — full-text inverted index, tag index, date index (10-100x faster search)
-- **Automatic schema migration** — v0.2/v0.3 data migrates on first load with backup and rollback
-- **Sub-10ms search at 10K memories** — see [benchmarks](#benchmarks) below
+- **File locking** — cross-platform `os.mkdir()`-based locks prevent concurrent writer data loss
+- **Optimistic conflict detection** — mtime/hash tracking catches stale read-modify-write patterns
+- **All writes locked by default** — `atomic_write_json()` now acquires a lock automatically
+- **60 tests** — 20 new concurrency tests including 4-thread race condition verification
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -174,6 +174,63 @@ report = mem.consolidate()
 - Flags contradictions (e.g., "API costs are reasonable" vs "API costs too much" — when phrased with explicit negation)
 - Suggests memories for archival (old, low-importance, rarely accessed)
 
+## Concurrency
+
+Multiple processes can safely read and write to the same memory workspace.
+
+### File Locking
+
+```python
+from antaris_memory import FileLock
+
+# Exclusive access to a resource
+with FileLock("/path/to/shard.json", timeout=10.0):
+    data = load(shard)
+    modify(data)
+    save(shard, data)
+
+# Non-blocking try
+lock = FileLock("/path/to/shard.json")
+if lock.acquire(blocking=False):
+    try:
+        ...
+    finally:
+        lock.release()
+```
+
+Locks use `os.mkdir()` — atomic on all platforms, works on network filesystems, zero dependencies. Stale locks from crashed processes are automatically detected and broken (by age or dead PID).
+
+### Optimistic Conflict Detection
+
+For read-heavy workloads where locking overhead isn't worth it:
+
+```python
+from antaris_memory import VersionTracker
+
+tracker = VersionTracker()
+
+# Snapshot before reading
+version = tracker.snapshot("/path/to/data.json")
+data = load(data_path)
+modify(data)
+
+# Check before writing — raises ConflictError if another process modified the file
+tracker.check(version)
+save(data_path, data)
+
+# Or use the retry helper:
+tracker.safe_update("/path/to/data.json", lambda d: {**d, "count": d["count"] + 1})
+```
+
+### Safety Stack
+
+All JSON writes use `atomic_write_json()` which combines:
+1. **Atomic writes** (tmpfile → fsync → os.replace) — prevents torn files
+2. **File locks** (os.mkdir) — prevents lost updates from concurrent writers
+3. **Directory fsync** (POSIX) — crash-consistent renames
+
+To opt out of locking for single-process workloads: `atomic_write_json(path, data, lock=False)`.
+
 ## Benchmarks
 
 Measured on Apple M4, Python 3.14 (beta). Results on Python 3.9–3.13 will be comparable — no version-specific optimizations are used. Reproducible via [`scripts/ollama_benchmark.py`](scripts/ollama_benchmark.py).
@@ -231,13 +288,15 @@ Storage format may evolve between versions. Breaking changes will increment MAJO
 ## Architecture
 
 ```
-MemorySystem (v0.4)
+MemorySystem (v0.5)
 ├── ShardManager       — Distributes memories across date/topic shards
 ├── IndexManager       — Full-text, tag, and date indexes for fast lookup
 │   ├── SearchIndex    — Inverted index for text search
 │   ├── TagIndex       — Tag → memory hash mapping
 │   └── DateIndex      — Date range queries
 ├── MigrationManager   — Schema versioning with backup and rollback
+├── FileLock           — Cross-platform directory-based file locking
+├── VersionTracker     — Optimistic conflict detection (mtime/hash)
 ├── InputGate          — P0-P3 classification at intake
 ├── DecayEngine        — Ebbinghaus forgetting curves
 ├── SentimentTagger    — Rule-based keyword tone tagging

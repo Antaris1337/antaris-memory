@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.5.0] - 2026-02-16
+
+### Added (Concurrency & Safety)
+- **File Locking** (`FileLock`): Cross-platform directory-based lock using `os.mkdir()` — portable across POSIX and Windows, works on network filesystems, zero dependencies
+  - Blocking and non-blocking acquisition modes
+  - Configurable timeout with `LockTimeout` exception
+  - Holder metadata (PID, timestamp) for debugging
+  - Automatic stale lock detection and breaking (by age or dead PID)
+  - Context manager support (`with FileLock(path): ...`)
+- **Optimistic Conflict Detection** (`VersionTracker`): Detect when another process modifies a file between your read and write
+  - `snapshot()` captures file mtime, size, and optional SHA-256 content hash
+  - `check()` raises `ConflictError` if file changed since snapshot
+  - `safe_update()` — read-modify-write with automatic retry on conflict
+  - `FileVersion.is_current()` for quick staleness checks
+- **Locked atomic writes**: `atomic_write_json()` now acquires a file lock by default (opt-out with `lock=False`)
+- **`locked_read_json()`**: Read JSON files under lock to prevent torn reads
+- 20 new tests (11 locking + 9 versioning), 60 total
+
+### Enhanced
+- **All JSON writes are now locked by default** — prevents lost updates from concurrent writers
+- **Atomic writes + locking + versioning** form a complete concurrency safety stack:
+  - Atomic writes prevent torn files
+  - Locks prevent lost updates
+  - Version tracking detects conflicts in read-heavy workloads
+
+### Technical
+- 3 new modules: `locking.py`, `versioning.py`, updated `utils.py`
+- 4 new classes: `FileLock`, `LockTimeout`, `VersionTracker`, `ConflictError`, `FileVersion`
+- Lock strategy: `os.mkdir()` (atomic on all platforms) with `holder.json` metadata
+- Stale lock detection: age threshold (default 5 min) + dead PID check (POSIX `os.kill(pid, 0)`)
+- Concurrent writer test: 4 threads × 50 iterations = 200 increments, zero lost updates
+
 ## [0.4.0] - 2026-02-15
 
 ### Added (Production Features)

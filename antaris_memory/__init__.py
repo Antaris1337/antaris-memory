@@ -27,7 +27,7 @@ Usage:
     pool.write("agent_1", "Key insight discovered", namespace="research")
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 # Import v0.4 system by default
 from antaris_memory.core_v4 import MemorySystemV4 as MemorySystem
@@ -51,6 +51,10 @@ from antaris_memory.shared import SharedMemoryPool, AgentPermission
 from antaris_memory.sharding import ShardManager, ShardKey
 from antaris_memory.migration import MigrationManager, Migration
 from antaris_memory.indexing import IndexManager, SearchIndex, TagIndex, DateIndex
+
+# v0.5: Concurrency
+from antaris_memory.locking import FileLock, LockTimeout
+from antaris_memory.versioning import VersionTracker, ConflictError
 
 # Backward compatibility - import legacy core if needed
 try:
@@ -86,4 +90,10 @@ __all__ = [
     "SearchIndex",
     "TagIndex",
     "DateIndex",
+    
+    # Concurrency (v0.5)
+    "FileLock",
+    "LockTimeout",
+    "VersionTracker",
+    "ConflictError",
 ]
