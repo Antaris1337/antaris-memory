@@ -67,9 +67,15 @@ mem.ingest("Decided to use PostgreSQL for the database.",
 mem.ingest("The API costs $500/month — too expensive.",
            source="review", category="operational")
 
-# Search (results ranked by relevance × decay score)
+# Search (BM25 ranking — confidence varies by relevance)
 for r in mem.search("database decision"):
-    print(f"[{r.confidence:.1f}] {r.content}")
+    print(f"[{r.confidence:.2f}] {r.content}")
+# → [1.00] Decided to use PostgreSQL for the database.
+# → [0.88] Database backup strategy needs review.
+
+# Detailed search with score explanations
+for r in mem.search("database decision", explain=True):
+    print(f"[{r.relevance:.2f}] {r.content[:60]}  ({r.explanation})")
 
 # Temporal queries
 mem.on_date("2026-02-14")
@@ -84,6 +90,22 @@ report = mem.consolidate()
 
 mem.save()
 ```
+
+## Search Quality (v1.0)
+
+Search uses BM25-inspired ranking with IDF weighting, field boosting, and length normalization. Scores are normalized to 0.0–1.0:
+
+```python
+results = mem.search("PostgreSQL database migration", explain=True)
+```
+
+| Score | Content | Why |
+|-------|---------|-----|
+| 1.00 | PostgreSQL migration completed successfully. | Matched: postgresql, migration |
+| 0.88 | Decided to use PostgreSQL for the database. | Matched: postgresql, database |
+| 0.33 | Database backup strategy needs review. | Matched: database (single term, lower IDF) |
+
+Previous versions returned flat 0.50 confidence for all results. v1.0 differentiates by term rarity (IDF), exact phrase matching (1.5x boost), tag matches (1.2x), and decay weighting.
 
 More examples in the [`examples/`](examples/) directory:
 - [`quickstart.py`](examples/quickstart.py) — basic usage
@@ -235,12 +257,14 @@ To opt out of locking for single-process workloads: `atomic_write_json(path, dat
 
 Measured on Apple M4, Python 3.14 (beta). Results on Python 3.9–3.13 will be comparable — no version-specific optimizations are used. Reproducible via [`scripts/ollama_benchmark.py`](scripts/ollama_benchmark.py).
 
-| Memories | Ingest | Search (avg) | Search (p99) | Consolidate | Disk |
-|----------|--------|-------------|-------------|-------------|------|
-| 100 | 1.0ms (0.010ms/entry) | 0.35ms | 0.40ms | 2.6ms | 46KB |
-| 500 | 4.4ms (0.009ms/entry) | 1.55ms | 1.83ms | 51ms | 230KB |
-| 1,000 | 7.1ms (0.007ms/entry) | 2.69ms | 3.20ms | 195ms | 460KB |
-| 5,000 | 36.8ms (0.007ms/entry) | 13.8ms | 16.2ms | 354ms | 2.3MB |
+| Memories | Ingest | Search (avg) | Search (p99) |
+|----------|--------|-------------|-------------|
+| 100 | 7.4ms (0.074ms/entry) | 0.57ms | 0.95ms |
+| 500 | 25.3ms (0.051ms/entry) | 2.31ms | 3.59ms |
+| 1,000 | 49.0ms (0.049ms/entry) | 4.63ms | 7.28ms |
+| 5,000 | 251.2ms (0.050ms/entry) | 23.5ms | 37.2ms |
+
+*v1.0 search uses BM25 scoring (slightly slower than v0.4's keyword matching, but with proper relevance ranking).*
 
 Input gating (P0–P3 classification): **0.177ms avg** per input.
 
@@ -332,16 +356,35 @@ cd antaris-memory
 python -m pytest tests/ -v
 ```
 
-All 44 tests pass with zero external dependencies. No test fixtures, no mocking libraries, no network access.
+All 78 tests pass with zero external dependencies. No test fixtures, no mocking libraries, no network access.
+
+## Migrating from v0.x
+
+Upgrading is automatic. Your existing workspace loads without changes:
+
+```python
+# Same API — just upgrade the package
+pip install antaris-memory==1.0.0
+
+# Existing workspaces load automatically
+mem = MemorySystem("./existing_workspace")
+mem.load()  # Auto-detects v0.2/v0.3/v0.4 format, migrates if needed, rebuilds search index
+```
+
+- **v0.2/v0.3 → v1.0**: Single-file format auto-migrates to sharded storage on first load (with backup)
+- **v0.4 → v1.0**: No migration needed. Search index rebuilds automatically.
+- **Search results**: `confidence` now reflects actual relevance (0.0-1.0) instead of static 0.50. Code using `r.confidence` will see better values, not different types.
+- **New `explain=True`**: Optional — returns `SearchResult` objects instead of `MemoryEntry`. Existing code unaffected.
 
 ## Zero Dependencies (Core)
 
-The core package uses only the Python standard library — no install-time dependencies. Optional extras (`pip install antaris-memory[embeddings]`) add integration points but are never required. All core operations (ingest, search, decay, consolidation) are fully deterministic with no external calls.
+The core package uses only the Python standard library — no install-time dependencies. An optional `[embeddings]` extra (`pip install antaris-memory[embeddings]`) installs `openai` for future embedding-based search (not yet implemented in core — planned for v1.1). All current operations (ingest, search, decay, consolidation) are fully deterministic with no external calls.
 
 ## Comparison
 
 | | Antaris Memory | [LangChain Memory](https://python.langchain.com/docs/modules/memory/) | [Mem0](https://github.com/mem0ai/mem0) | [Zep](https://github.com/getzep/zep) |
 |---|---|---|---|---|
+| Search ranking | ✅ [BM25 with IDF](#search-quality-v10) | ❌ Exact match | ✅ Embeddings | ✅ Embeddings |
 | Input gating | ✅ [P0-P3](#input-gating-p0p3) | ❌ | ❌ | ❌ |
 | Knowledge synthesis | ✅ [Gap detection](#knowledge-synthesis) | ❌ | ❌ | ❌ |
 | No database required | ✅ | ❌ | ❌ | ❌ |
