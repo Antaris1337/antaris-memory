@@ -103,8 +103,8 @@ class V2ToV4Migration(Migration):
             }
             
             migration_path = os.path.join(workspace, "migration_v2_to_v4.json")
-            with open(migration_path, "w") as f:
-                json.dump(migration_info, f, indent=2)
+            from .utils import atomic_write_json
+            atomic_write_json(migration_path, migration_info)
             
             # Archive the old metadata file (don't delete in case rollback is needed)
             old_metadata_archive = os.path.join(workspace, "memory_metadata_v2_archive.json")

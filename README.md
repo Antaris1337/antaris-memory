@@ -274,9 +274,9 @@ python -m pytest tests/ -v
 
 All 44 tests pass with zero external dependencies. No test fixtures, no mocking libraries, no network access.
 
-## Zero Dependencies
+## Zero Dependencies (Core)
 
-The core package uses only the Python standard library. Optional integrations (LLMs, embeddings) are deliberately excluded to preserve deterministic behavior and eliminate runtime requirements.
+The core package uses only the Python standard library — no install-time dependencies. Optional extras (`pip install antaris-memory[embeddings]`) add integration points but are never required. All core operations (ingest, search, decay, consolidation) are fully deterministic with no external calls.
 
 ## Comparison
 

@@ -110,9 +110,12 @@ class MemorySystemV4:
         if self.migration_manager.needs_migration():
             migration_result = self.migration_manager.migrate()
             if migration_result["status"] == "success":
-                print(f"✅ Migrated from {migration_result['from_version']} to {migration_result['to_version']}")
+                import logging
+                logging.getLogger("antaris_memory").info(
+                    f"Migrated from {migration_result['from_version']} to {migration_result['to_version']}")
             elif migration_result["status"] == "error":
-                print(f"❌ Migration failed: {migration_result['message']}")
+                logging.getLogger("antaris_memory").error(
+                    f"Migration failed: {migration_result['message']}")
                 # Fall back to legacy format
                 self.use_sharding = False
                 self.use_indexing = False

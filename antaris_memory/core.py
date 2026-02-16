@@ -88,8 +88,8 @@ class MemorySystem:
             "count": len(self.memories),
             "memories": [m.to_dict() for m in self.memories],
         }
-        with open(self.metadata_path, "w") as f:
-            json.dump(data, f, indent=2)
+        from .utils import atomic_write_json
+        atomic_write_json(self.metadata_path, data)
         return self.metadata_path
 
     def load(self) -> int:
@@ -356,5 +356,5 @@ class MemorySystem:
             with open(self.audit_path) as f:
                 log = json.load(f)
         log.append(entry)
-        with open(self.audit_path, "w") as f:
-            json.dump(log[-100:], f, indent=2)
+        from .utils import atomic_write_json
+        atomic_write_json(self.audit_path, log[-100:])

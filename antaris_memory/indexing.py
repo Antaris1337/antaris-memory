@@ -156,8 +156,8 @@ class SearchIndex:
             "memory_metadata": self.memory_metadata
         }
         
-        with open(self.index_path, "w") as f:
-            json.dump(data, f, indent=2)
+        from .utils import atomic_write_json
+        atomic_write_json(self.index_path, data)
     
     def load_index(self):
         """Load the search index from disk."""
@@ -295,8 +295,8 @@ class TagIndex:
             "memory_to_tags": self.memory_to_tags
         }
         
-        with open(self.index_path, "w") as f:
-            json.dump(data, f, indent=2)
+        from .utils import atomic_write_json
+        atomic_write_json(self.index_path, data)
     
     def load_index(self):
         """Load the tag index from disk."""
@@ -394,8 +394,8 @@ class DateIndex:
             "memory_to_date": self.memory_to_date
         }
         
-        with open(self.index_path, "w") as f:
-            json.dump(data, f, indent=2)
+        from .utils import atomic_write_json
+        atomic_write_json(self.index_path, data)
     
     def load_index(self):
         """Load the date index from disk."""

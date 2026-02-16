@@ -92,8 +92,8 @@ class ShardIndex:
             ]
         }
         
-        with open(self.index_path, "w") as f:
-            json.dump(data, f, indent=2)
+        from .utils import atomic_write_json
+        atomic_write_json(self.index_path, data)
     
     def add_shard(self, key: ShardKey, memories: List[MemoryEntry]):
         """Register a new shard in the index."""
@@ -213,8 +213,8 @@ class ShardManager:
             "memories": [m.to_dict() for m in memories]
         }
         
-        with open(shard_path, "w") as f:
-            json.dump(data, f, indent=2)
+        from .utils import atomic_write_json
+        atomic_write_json(shard_path, data)
         
         # Update index with actual file size
         file_size = os.path.getsize(shard_path)
