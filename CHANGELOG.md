@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.1] - 2026-02-16
+
+### Fixed (Review Polish)
+- **Phrase matching** now token-sequence based (no substring false positives from punctuation)
+- **Boost capping**: max one tag boost (1.2x) and one source boost (1.1x) per entry
+- **Numeric tokens** kept when ≥ 3 chars ("500", "2026" are searchable)
+- **Index staleness**: `mark_dirty()` wired into ingest, forget, and compact; `reindex()` on public API
+- **Atomic writes** for legacy save and audit log (zero non-atomic JSON writes remain)
+- **Corpus versioning**: search index rebuilds on version mismatch, not just count mismatch
+- **Consolidate bug**: `core_v4.py` was calling nonexistent `.consolidate()` instead of `.run()`
+- Clean `__init__.py` docstring and group headers (no stale version references)
+- Locking scope clarified in README
+- Benchmarks updated with Consolidate and Disk columns
+
 ## [1.0.0] - 2026-02-16
 
 ### Added (Search Engine)

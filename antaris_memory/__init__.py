@@ -15,7 +15,7 @@ Usage:
     mem.save()
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 # Core
 from antaris_memory.core_v4 import MemorySystemV4 as MemorySystem
