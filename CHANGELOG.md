@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0] - 2026-02-15
+
+### Added
+- **Multi-Agent Shared Memory** (`SharedMemoryPool`): Multiple agents share a memory space with role-based access controls
+- **Agent Permissions** (`AgentPermission`): Read, write, admin roles with namespace-level isolation
+- **Namespace Isolation**: Agents only see memories in namespaces they have access to
+- **Cross-Agent Conflict Detection**: Flags contradictions when agents write conflicting memories
+- **Conflict Resolution**: Resolve disputes with audit trail
+- **Knowledge Propagation**: Share discoveries from one agent's namespace to another
+- **Pool Statistics**: Per-agent, per-namespace memory counts and conflict tracking
+- 18 new tests for shared memory (40 total)
+
 ## [0.2.0] - 2026-02-15
 
 ### Added

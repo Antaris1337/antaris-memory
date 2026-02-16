@@ -15,7 +15,7 @@ Usage:
     mem.save()
 """
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 from antaris_memory.core import MemorySystem
 from antaris_memory.entry import MemoryEntry
@@ -28,6 +28,7 @@ from antaris_memory.forgetting import ForgettingEngine
 from antaris_memory.consolidation import ConsolidationEngine
 from antaris_memory.gating import InputGate
 from antaris_memory.synthesis import KnowledgeSynthesizer
+from antaris_memory.shared import SharedMemoryPool, AgentPermission
 
 __all__ = [
     "MemorySystem",
@@ -41,4 +42,6 @@ __all__ = [
     "ConsolidationEngine",
     "InputGate",
     "KnowledgeSynthesizer",
+    "SharedMemoryPool",
+    "AgentPermission",
 ]
