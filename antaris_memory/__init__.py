@@ -1,30 +1,18 @@
 """
-Antaris Memory — Production-ready file-based persistent memory for AI agents.
+Antaris Memory — File-based persistent memory for AI agents.
 
-v0.4 Features:
-- Sharded storage for better performance and scalability  
-- Fast search indexes (full-text, tags, dates)
-- Schema migration system with backward compatibility
-- Multi-agent shared memory pools with access controls
-
-Give your AI agents persistent memory that decays, reinforces,
-feels, reasons about time, and scales to production workloads.
-For under $5/year.
+Store, search, decay, and consolidate agent memories using only the
+Python standard library. Zero dependencies, deterministic operations,
+transparent JSON storage.
 
 Usage:
     from antaris_memory import MemorySystem
 
-    mem = MemorySystem("/path/to/workspace")
-    mem.ingest_file("conversation.md", category="tactical")
-    results = mem.search("what did we decide about pricing?")  # Uses fast indexes
-    mem.save()  # Saves to sharded format
-
-    # Multi-agent usage
-    from antaris_memory import SharedMemoryPool
-    
-    pool = SharedMemoryPool("/shared/workspace", "team_alpha")
-    pool.register_agent("agent_1", role="write")
-    pool.write("agent_1", "Key insight discovered", namespace="research")
+    mem = MemorySystem("./workspace")
+    mem.load()
+    mem.ingest("Key decision made", source="meeting", category="strategic")
+    results = mem.search("decision")
+    mem.save()
 """
 
 __version__ = "1.0.0"

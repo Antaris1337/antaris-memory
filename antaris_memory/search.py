@@ -83,12 +83,15 @@ class SearchEngine:
         self._avg_doc_len: float = 0
         self._doc_count: int = 0
         self._doc_freqs: Counter = Counter()  # term → number of docs containing it
+        self._corpus_version: int = 0
+        self._indexed_version: int = -1
     
     def build_index(self, memories: list) -> None:
         """Build IDF statistics from the memory corpus.
         
         Call this after loading/ingesting memories to enable proper ranking.
         """
+        self._indexed_version = self._corpus_version
         self._doc_count = len(memories)
         self._doc_freqs.clear()
         self._idf_cache.clear()
@@ -130,8 +133,8 @@ class SearchEngine:
         if not query_tokens:
             return []
         
-        # Rebuild index if needed
-        if self._doc_count == 0 or self._doc_count != len(memories):
+        # Rebuild index if needed (stale version or count mismatch)
+        if self._indexed_version != self._corpus_version or self._doc_count != len(memories):
             self.build_index(memories)
         
         results = []
@@ -209,28 +212,32 @@ class SearchEngine:
         if len(query_tokens) > 1 and query_lower in content_lower:
             score *= 1.5
         
-        # Field boosting: check tags
+        # Field boosting: check tags (at most one 1.2x boost per entry)
         if hasattr(mem, 'tags') and mem.tags:
             tag_text = " ".join(mem.tags).lower()
+            tag_hit = False
             for term in query_tokens:
                 if term in tag_text:
-                    score *= 1.2
+                    if not tag_hit:
+                        score *= 1.2
+                        tag_hit = True
                     if term not in matched:
                         matched.append(f"tag:{term}")
         
-        # Field boosting: check source
+        # Field boosting: check source (at most one 1.1x boost per entry)
         if hasattr(mem, 'source') and mem.source:
             source_lower = mem.source.lower()
             for term in query_tokens:
                 if term in source_lower:
                     score *= 1.1
+                    break
         
         return score, matched
     
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize text into lowercase terms, filtering stopwords."""
         tokens = re.findall(r'\w{2,}', text.lower())
-        return [t for t in tokens if t not in self.STOPWORDS and not t.isdigit()]
+        return [t for t in tokens if t not in self.STOPWORDS and not (t.isdigit() and len(t) < 3)]
     
     def _explain(self, matched: List[str], score: float, relevance: float) -> str:
         """Generate a human-readable explanation of the score."""
@@ -238,6 +245,15 @@ class SearchEngine:
         parts.append(f"raw={score:.3f}")
         parts.append(f"relevance={relevance:.2f}")
         return " | ".join(parts)
+    
+    def mark_dirty(self) -> None:
+        """Mark the corpus as changed. Next search() will rebuild the index."""
+        self._corpus_version += 1
+    
+    def reindex(self, memories: list) -> None:
+        """Force a full index rebuild."""
+        self._corpus_version += 1
+        self.build_index(memories)
     
     def stats(self) -> Dict:
         """Return index statistics."""
