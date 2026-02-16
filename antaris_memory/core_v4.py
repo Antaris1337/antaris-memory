@@ -1,18 +1,20 @@
 """
-MemorySystem v0.4 — Production-ready with sharding, indexing, and migration.
+MemorySystem — Production-ready memory system with sharding, BM25 search, and concurrency safety.
 
-Major improvements over v0.3:
-- Sharded storage for better performance and scalability
-- Fast search indexes (full-text, tags, dates)
-- Schema migration system
-- Backward compatibility with v0.2/v0.3 data
+Features:
+- Sharded storage for scalability (10K+ memories)
+- BM25-inspired search with IDF weighting and field boosting
+- File locking and optimistic conflict detection
+- Fast indexes (full-text, tags, dates)
+- Schema migration with backward compatibility
 
 Usage:
     from antaris_memory import MemorySystem
 
     mem = MemorySystem("./workspace")
-    mem.ingest_file("notes.md", category="tactical")
-    results = mem.search("patent filing")  # Uses fast indexes
+    mem.load()
+    mem.ingest("Key decision", source="meeting", category="strategic")
+    results = mem.search("decision")
     mem.save()  # Saves to sharded format
 """
 
