@@ -150,7 +150,8 @@ class MemorySystemV4:
             self.index_manager.rebuild_indexes(self.memories)
             self.index_manager.save_all_indexes()
         
-        return "sharded format"
+        shard_dir = os.path.join(self.workspace, "shards")
+        return shard_dir
     
     def _save_legacy(self) -> str:
         """Save using v0.2/v0.3 legacy single-file format."""
@@ -205,13 +206,28 @@ class MemorySystemV4:
                tags: Optional[List[str]] = None,
                tag_mode: str = "any",
                date_range: Optional[Tuple[str, str]] = None,
-               use_decay: bool = True) -> List[MemoryEntry]:
-        """Search memories using fast indexes when available."""
+               use_decay: bool = True,
+               category: str = None,
+               min_confidence: float = 0.0,
+               sentiment_filter: str = None) -> List[MemoryEntry]:
+        """Search memories using fast indexes when available.
         
+        Backward-compatible with v0.3 parameters (category, min_confidence, sentiment_filter).
+        """
         if self.use_indexing and self.index_manager:
-            return self._search_indexed(query, limit, tags, tag_mode, date_range, use_decay)
+            results = self._search_indexed(query, limit * 2 if category else limit, tags, tag_mode, date_range, use_decay)
         else:
-            return self._search_legacy(query, limit, use_decay)
+            results = self._search_legacy(query, limit * 2 if category else limit, use_decay)
+        
+        # Apply v0.3-compatible filters
+        if category:
+            results = [r for r in results if r.category == category]
+        if min_confidence > 0:
+            results = [r for r in results if r.confidence >= min_confidence]
+        if sentiment_filter and hasattr(results[0] if results else None, 'sentiment'):
+            results = [r for r in results if r.sentiment and sentiment_filter in r.sentiment]
+        
+        return results[:limit]
     
     def _search_indexed(self, 
                        query: str,
@@ -479,6 +495,111 @@ class MemorySystemV4:
     def get_migration_history(self) -> List[Dict]:
         """Get history of applied migrations."""
         return self.migration_manager.get_migration_history()
+
+    # ── Backward-compatible methods from v0.3 ──────────────────────
+
+    def stats(self) -> Dict:
+        """v0.3-compatible stats method. Adds backward-compat keys."""
+        s = self.get_stats()
+        now = datetime.now()
+        scores = [self.decay.score(m, now) for m in self.memories]
+        sentiments = defaultdict(int)
+        for m in self.memories:
+            dom = self.sentiment.dominant(m.sentiment)
+            if dom:
+                sentiments[dom] += 1
+        s["total"] = len(self.memories)
+        s["avg_score"] = round(sum(scores) / max(len(scores), 1), 4)
+        s["archive_candidates"] = sum(1 for sc in scores if sc < self.decay.archive_threshold)
+        s["sentiments"] = dict(sentiments)
+        s["avg_confidence"] = round(
+            sum(m.confidence for m in self.memories) / max(len(self.memories), 1), 4
+        )
+        return s
+
+    def ingest_with_gating(self, content: str, source: str = "inline",
+                           context: Dict = None) -> int:
+        """Ingest with P0-P3 input classification. P3 content is dropped.
+        
+        Multi-line content is split and each line classified independently.
+        """
+        count = 0
+        for i, line in enumerate(content.split("\n")):
+            stripped = line.strip()
+            if len(stripped) < 5:
+                continue
+            gate_context = context or {}
+            gate_context.update({"source": source, "line": i + 1})
+            routing = self.gating.route(stripped, gate_context)
+            if not routing["store"]:
+                continue
+            category = routing.get("category", "tactical")
+            count += self.ingest(stripped, source=source, category=category)
+        return count
+
+    def on_date(self, date: str) -> List[MemoryEntry]:
+        """Get memories from a specific date."""
+        return self.temporal.on_date(self.memories, date)
+
+    def between(self, start: str, end: str) -> List[MemoryEntry]:
+        """Get memories between two dates."""
+        return self.temporal.between(self.memories, start, end)
+
+    def narrative(self, topic: str = None) -> str:
+        """Build a narrative from memories, optionally filtered by topic."""
+        return self.temporal.narrative(self.memories, topic=topic)
+
+    def forget(self, topic: str = None, entity: str = None,
+               before_date: str = None) -> Dict:
+        """Selectively forget memories with audit trail."""
+        result = self.forgetting.forget(
+            self.memories, topic=topic, entity=entity, before_date=before_date
+        )
+        if "removed" in result:
+            removed_set = set(m.hash for m in result["removed"])
+            self.memories = [m for m in self.memories if m.hash not in removed_set]
+            # Log to audit
+            for m in result["removed"]:
+                self._append_audit({"action": "forget", "hash": m.hash,
+                                    "content_preview": m.content[:50],
+                                    "timestamp": datetime.now().isoformat()})
+        return result
+
+    def consolidate(self) -> Dict:
+        """Run consolidation: dedup, clustering, contradiction detection."""
+        return self.consolidation.consolidate(self.memories)
+
+    def compress_old(self, days: int = 7) -> list:
+        """Compress memories older than N days."""
+        return self.compression.compress(self.memories, days=days)
+
+    def synthesize(self, research_results: Dict = None) -> Dict:
+        """Integrate research findings into memory."""
+        report = self.synthesis.run_cycle(self.memories, research_results=research_results)
+        # Add synthesized entries to memory store
+        if report.get("synthesized_entries", 0) > 0 and "new_entries" in report:
+            for entry_dict in report["new_entries"]:
+                entry = MemoryEntry.from_dict(entry_dict)
+                if "synthesis" not in entry.tags:
+                    entry.tags.append("synthesis")
+                self.memories.append(entry)
+                if self.use_indexing and self.index_manager:
+                    self.index_manager.add_memory(entry)
+        return report
+
+    def research_suggestions(self, limit: int = 5) -> List[Dict]:
+        """Get suggestions for knowledge gaps."""
+        return self.synthesis.suggest_research_topics(self.memories, limit=limit)
+
+    def _append_audit(self, entry: Dict) -> None:
+        """Append an entry to the audit log."""
+        audit = []
+        if os.path.exists(self.audit_path):
+            with open(self.audit_path) as f:
+                audit = json.load(f)
+        audit.append(entry)
+        with open(self.audit_path, "w") as f:
+            json.dump(audit, f, indent=2)
 
 
 # Backward compatibility alias

@@ -5,7 +5,7 @@
 Store, search, decay, and consolidate agent memories using only the Python standard library. Sharded storage for scalability, fast search indexes, automatic schema migration. No vector databases, no infrastructure, no API keys.
 
 [![PyPI](https://img.shields.io/pypi/v/antaris-memory)](https://pypi.org/project/antaris-memory/)
-[![Tests](https://img.shields.io/badge/tests-56%20passing-brightgreen)](https://github.com/Antaris-Analytics/antaris-memory)
+[![Tests](https://img.shields.io/badge/tests-44%20passing-brightgreen)](https://github.com/Antaris-Analytics/antaris-memory)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
@@ -152,37 +152,53 @@ report = mem.consolidate()
 
 ## Storage Format
 
-All state is stored in a single `memory_metadata.json` file:
+**v0.4 (sharded)** — memories are split across multiple files by date and topic:
+
+```
+workspace/
+├── shards/
+│   ├── 2026-02-strategic.json    # Strategic memories from Feb 2026
+│   ├── 2026-02-operational.json  # Operational memories from Feb 2026
+│   └── 2026-01-tactical.json     # Tactical memories from Jan 2026
+├── indexes/
+│   ├── search_index.json         # Full-text inverted index
+│   ├── tag_index.json            # Tag → memory hash lookup
+│   └── date_index.json           # Date range index
+├── migrations/
+│   └── history.json              # Applied migration log
+└── memory_audit.json             # Deletion audit trail (GDPR)
+```
+
+Each shard is a plain JSON file containing an array of memory entries:
 
 ```json
 {
-  "version": "0.2.0",
-  "saved_at": "2026-02-15T14:30:00",
-  "count": 10938,
-  "memories": [
-    {
-      "hash": "a1b2c3d4e5f6",
-      "content": "Decided to use PostgreSQL",
-      "source": "meeting-notes",
-      "category": "strategic",
-      "created": "2026-02-15T10:00:00",
-      "importance": 1.0,
-      "confidence": 0.8,
-      "sentiment": {"strategic": 0.6},
-      "tags": ["postgresql", "deployment"]
-    }
-  ]
+  "hash": "a1b2c3d4e5f6",
+  "content": "Decided to use PostgreSQL",
+  "source": "meeting-notes",
+  "category": "strategic",
+  "created": "2026-02-15T10:00:00",
+  "importance": 1.0,
+  "confidence": 0.8,
+  "sentiment": {"strategic": 0.6},
+  "tags": ["postgresql", "deployment"]
 }
 ```
 
-Deletions are logged to `memory_audit.json` for compliance.
+**v0.2/v0.3 (legacy)** — single `memory_metadata.json` file. Automatically migrated to sharded format on first v0.4 load, with backup and rollback support.
 
 Storage format may evolve between versions. Breaking changes will increment MAJOR version. See [CHANGELOG](CHANGELOG.md).
 
 ## Architecture
 
 ```
-MemorySystem
+MemorySystem (v0.4)
+├── ShardManager       — Distributes memories across date/topic shards
+├── IndexManager       — Full-text, tag, and date indexes for fast lookup
+│   ├── SearchIndex    — Inverted index for text search
+│   ├── TagIndex       — Tag → memory hash mapping
+│   └── DateIndex      — Date range queries
+├── MigrationManager   — Schema versioning with backup and rollback
 ├── InputGate          — P0-P3 classification at intake
 ├── DecayEngine        — Ebbinghaus forgetting curves
 ├── SentimentTagger    — Rule-based keyword tone tagging
@@ -194,7 +210,7 @@ MemorySystem
 └── KnowledgeSynthesizer — Gap identification and research integration
 ```
 
-**Data flow:** `ingest → classify (P0-P3) → normalize → persist → search → decay-weight → return`
+**Data flow:** `ingest → classify (P0-P3) → normalize → shard-route → index → persist → search (index lookup) → decay-weight → return`
 
 ## Zero Dependencies
 
