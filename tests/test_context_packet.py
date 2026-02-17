@@ -137,6 +137,19 @@ class TestContextPacket(unittest.TestCase):
         # Can't test fully without a MemorySystem, but we test the packet builder validation
         # indirectly via the MemorySystem method in the builder tests below
 
+    def test_render_xml_environment_key_sanitation(self):
+        """Environment keys with spaces/digits should produce valid XML."""
+        p = ContextPacket(
+            task="test",
+            environment={"python version": "3.11", "3.11": "active", "venv-svi": "/path"},
+        )
+        xml = p.render("xml")
+        # Should use <var name="..."> not dynamic tag names
+        self.assertIn('name="python version"', xml)
+        self.assertIn('name="3.11"', xml)
+        self.assertNotIn("<python version>", xml)
+        self.assertNotIn("<3.11>", xml)
+
     def test_render_default_is_markdown(self):
         p = ContextPacket(task="test", memories=[{"content": "m", "score": 0.5}])
         self.assertEqual(p.render(), p.render("markdown"))
@@ -280,6 +293,21 @@ class TestContextPacketBuilder(unittest.TestCase):
         self.assertEqual(packet.environment["host"], "mac-mini")
         self.assertEqual(len(packet.instructions), 2)
         self.assertLessEqual(len(packet), 5)
+
+    def test_build_multi_stable_dedup(self):
+        """Identical content should always deduplicate regardless of process."""
+        packet1 = self.mem.build_context_packet_multi(
+            task="guard test",
+            queries=["antaris-guard", "antaris-guard", "antaris-guard"],
+        )
+        packet2 = self.mem.build_context_packet_multi(
+            task="guard test",
+            queries=["antaris-guard", "antaris-guard", "antaris-guard"],
+        )
+        # Same content set both times (deterministic dedup)
+        contents1 = [m["content"] for m in packet1.memories]
+        contents2 = [m["content"] for m in packet2.memories]
+        self.assertEqual(contents1, contents2)
 
     def test_min_relevance_validation(self):
         with self.assertRaises(ValueError):

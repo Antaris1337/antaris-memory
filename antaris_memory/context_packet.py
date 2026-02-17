@@ -34,6 +34,7 @@ Usage:
     data = packet.to_dict()
 """
 
+import hashlib
 import html
 import json
 from dataclasses import dataclass, field
@@ -119,7 +120,9 @@ class ContextPacket:
         if self.environment:
             lines.append("  <environment>")
             for k, v in self.environment.items():
-                lines.append(f"    <{k}>{html.escape(str(v))}</{k}>")
+                lines.append(
+                    f'    <var name="{html.escape(str(k))}">{html.escape(str(v))}</var>'
+                )
             lines.append("  </environment>")
 
         if self.instructions:
@@ -170,7 +173,10 @@ class ContextPacket:
 
     @property
     def estimated_tokens(self) -> int:
-        """Rough token estimate for the rendered packet (len/4 heuristic)."""
+        """Rough token estimate for the rendered packet (len/4 heuristic).
+
+        Based on markdown rendering. XML/JSON output may differ slightly.
+        """
         return len(self.render()) // 4
 
     def trim(self, max_tokens: int) -> "ContextPacket":
@@ -272,7 +278,8 @@ class ContextPacketBuilder:
         for r in results:
             # Tag filter: if tags specified, entry must have at least one matching tag
             if tags and hasattr(r.entry, "tags") and r.entry.tags:
-                if not any(t.lower() in [et.lower() for et in r.entry.tags] for t in tags):
+                entry_tags = {et.lower() for et in r.entry.tags}
+                if not any(t.lower() in entry_tags for t in tags):
                     continue
             elif tags and (not hasattr(r.entry, "tags") or not r.entry.tags):
                 continue  # Tags requested but entry has none
@@ -360,10 +367,10 @@ class ContextPacketBuilder:
             for r in results:
                 if r.relevance < min_relevance:
                     continue
-                # Dedup by entry hash, falling back to content hash
+                # Dedup by entry hash, falling back to stable content digest
                 entry_hash = getattr(r.entry, "hash", None)
                 if not entry_hash:
-                    entry_hash = str(hash(r.content))
+                    entry_hash = hashlib.sha1(r.content.encode("utf-8")).hexdigest()
                 if entry_hash in seen_hashes:
                     continue
                 seen_hashes.add(entry_hash)
