@@ -34,10 +34,11 @@ Usage:
     data = packet.to_dict()
 """
 
+import html
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -61,18 +62,18 @@ class ContextPacket:
     instructions: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def render(self, format: str = "markdown") -> str:
+    def render(self, fmt: str = "markdown") -> str:
         """Render the packet as injectable text.
 
         Args:
-            format: Output format — "markdown" (default) or "xml" or "json".
+            fmt: Output format — "markdown" (default) or "xml" or "json".
 
         Returns:
             Formatted string ready for prompt injection.
         """
-        if format == "json":
+        if fmt == "json":
             return json.dumps(self.to_dict(), indent=2)
-        elif format == "xml":
+        elif fmt == "xml":
             return self._render_xml()
         else:
             return self._render_markdown()
@@ -118,20 +119,21 @@ class ContextPacket:
         if self.environment:
             lines.append("  <environment>")
             for k, v in self.environment.items():
-                lines.append(f"    <{k}>{v}</{k}>")
+                lines.append(f"    <{k}>{html.escape(str(v))}</{k}>")
             lines.append("  </environment>")
 
         if self.instructions:
             lines.append("  <instructions>")
             for inst in self.instructions:
-                lines.append(f"    <instruction>{inst}</instruction>")
+                lines.append(f"    <instruction>{html.escape(inst)}</instruction>")
             lines.append("  </instructions>")
 
         if self.memories:
             lines.append("  <relevant_context>")
             for mem in self.memories:
-                source = mem.get("source", "")
-                lines.append(f'    <memory source="{source}">{mem["content"]}</memory>')
+                source = html.escape(mem.get("source", ""))
+                content = html.escape(mem["content"])
+                lines.append(f'    <memory source="{source}">{content}</memory>')
             lines.append("  </relevant_context>")
 
         lines.append("</context_packet>")
@@ -241,24 +243,39 @@ class ContextPacketBuilder:
             instructions: Explicit instructions for the sub-agent.
             max_memories: Maximum memories to include (default 15).
             max_tokens: Token budget for the rendered packet (default 4000).
-            min_relevance: Minimum relevance score to include (default 0.1).
+            min_relevance: Minimum relevance score (0.0–1.0 normalized) to include.
+                Score vs relevance: score is raw BM25 output, relevance is
+                normalized to 0.0–1.0 where 1.0 = best match in the result set.
+                Filtering uses relevance; output includes raw score for debugging.
             include_sources: Whether to include source attribution (default True).
 
         Returns:
             A ContextPacket ready for injection into a sub-agent prompt.
         """
+        # Validate min_relevance (0.0–1.0 scale, not percentage)
+        if min_relevance > 1.0:
+            raise ValueError(
+                f"min_relevance={min_relevance} looks like a percentage. "
+                f"Use 0.0–1.0 scale (e.g. 0.1 = 10%)."
+            )
+
         # Search for relevant memories using the task as query
         results = self.mem.search(
             query=task,
-            limit=max_memories * 2,  # Over-fetch, then filter
-            tags=tags,
+            limit=max_memories * 3,  # Over-fetch to allow for filtering
             category=category,
             explain=True,
         )
 
-        # Filter by relevance and build memory list
+        # Filter by relevance and tags, build memory list
         memories = []
         for r in results:
+            # Tag filter: if tags specified, entry must have at least one matching tag
+            if tags and hasattr(r.entry, "tags") and r.entry.tags:
+                if not any(t.lower() in [et.lower() for et in r.entry.tags] for t in tags):
+                    continue
+            elif tags and (not hasattr(r.entry, "tags") or not r.entry.tags):
+                continue  # Tags requested but entry has none
             if r.relevance < min_relevance:
                 continue
             if len(memories) >= max_memories:
@@ -343,11 +360,13 @@ class ContextPacketBuilder:
             for r in results:
                 if r.relevance < min_relevance:
                     continue
+                # Dedup by entry hash, falling back to content hash
                 entry_hash = getattr(r.entry, "hash", None)
-                if entry_hash and entry_hash in seen_hashes:
+                if not entry_hash:
+                    entry_hash = str(hash(r.content))
+                if entry_hash in seen_hashes:
                     continue
-                if entry_hash:
-                    seen_hashes.add(entry_hash)
+                seen_hashes.add(entry_hash)
 
                 all_memories.append({
                     "content": r.content,

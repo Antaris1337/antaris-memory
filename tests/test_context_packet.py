@@ -118,6 +118,30 @@ class TestContextPacket(unittest.TestCase):
         self.assertIn("memories=1", r)
 
 
+    def test_render_xml_escaping(self):
+        p = ContextPacket(
+            task="test",
+            memories=[{"content": "<script>alert('xss')</script> & other stuff", "score": 0.5, "source": "user<input>"}],
+            environment={"path": "/usr/bin & /home"},
+            instructions=["Handle <angle> brackets"],
+        )
+        xml = p.render("xml")
+        self.assertNotIn("<script>", xml)
+        self.assertIn("&lt;script&gt;", xml)
+        self.assertIn("&amp; other", xml)
+        self.assertIn("&lt;angle&gt;", xml)
+
+    def test_min_relevance_percentage_error(self):
+        """Passing min_relevance > 1.0 should raise ValueError."""
+        from antaris_memory.context_packet import ContextPacketBuilder
+        # Can't test fully without a MemorySystem, but we test the packet builder validation
+        # indirectly via the MemorySystem method in the builder tests below
+
+    def test_render_default_is_markdown(self):
+        p = ContextPacket(task="test", memories=[{"content": "m", "score": 0.5}])
+        self.assertEqual(p.render(), p.render("markdown"))
+
+
 class TestContextPacketBuilder(unittest.TestCase):
     """Test building context packets from a MemorySystem."""
 
@@ -230,6 +254,36 @@ class TestContextPacketBuilder(unittest.TestCase):
     def test_empty_search_returns_empty_packet(self):
         packet = self.mem.build_context_packet(task="zzzznonexistentzzzzz")
         self.assertEqual(len(packet), 0)
+
+    def test_empty_memory_system(self):
+        """Building a packet from an empty memory system should work."""
+        empty_dir = tempfile.mkdtemp()
+        try:
+            empty_mem = MemorySystem(empty_dir)
+            packet = empty_mem.build_context_packet(task="anything")
+            self.assertEqual(len(packet), 0)
+            self.assertFalse(bool(packet))
+        finally:
+            shutil.rmtree(empty_dir, ignore_errors=True)
+
+    def test_build_multi_with_full_params(self):
+        packet = self.mem.build_context_packet_multi(
+            task="full audit",
+            queries=["antaris-guard", "Python version"],
+            environment={"host": "mac-mini", "venv": "venv-svi"},
+            instructions=["Check venv first", "Report versions"],
+            max_memories=5,
+            max_tokens=2000,
+            min_relevance=0.05,
+        )
+        self.assertIsInstance(packet, ContextPacket)
+        self.assertEqual(packet.environment["host"], "mac-mini")
+        self.assertEqual(len(packet.instructions), 2)
+        self.assertLessEqual(len(packet), 5)
+
+    def test_min_relevance_validation(self):
+        with self.assertRaises(ValueError):
+            self.mem.build_context_packet(task="test", min_relevance=50)
 
     def test_min_relevance_filter(self):
         packet = self.mem.build_context_packet(
