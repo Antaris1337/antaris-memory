@@ -15,7 +15,7 @@ Usage:
     mem.save()
 """
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 
 # Core
 from antaris_memory.core_v4 import MemorySystemV4 as MemorySystem
@@ -44,6 +44,9 @@ from antaris_memory.versioning import VersionTracker, ConflictError
 
 # Search
 from antaris_memory.search import SearchEngine, SearchResult
+
+# Context Packets (v1.1)
+from antaris_memory.context_packet import ContextPacket, ContextPacketBuilder
 
 # Backward compatibility - import legacy core if needed
 try:
@@ -89,4 +92,8 @@ __all__ = [
     # Search (v1.0)
     "SearchEngine",
     "SearchResult",
+    
+    # Context Packets (v1.1)
+    "ContextPacket",
+    "ContextPacketBuilder",
 ]

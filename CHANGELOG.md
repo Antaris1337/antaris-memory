@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0] - 2026-02-17
+
+### Added
+- **Context Packets** — structured memory injection for sub-agent spawning
+  - `ContextPacket` data class with markdown/XML/JSON rendering
+  - `ContextPacketBuilder` builds packets from BM25 search results
+  - `mem.build_context_packet(task=...)` — single-query convenience method
+  - `mem.build_context_packet_multi(task=..., queries=[...])` — multi-query with deduplication
+  - Token budgeting via `.trim(max_tokens)` 
+  - Full serialization roundtrip (`.to_dict()` / `.from_dict()`)
+  - Environment and instruction injection for sub-agent context
+- 26 new tests (104 total, up from 78)
+
+### Why
+Sub-agents spawn cold with zero context, leading to confident mistakes
+based on incomplete information (e.g., checking global pip instead of a venv).
+Context packets solve this by searching relevant memories and packaging them
+as structured onboarding for the sub-agent's prompt.
+
 ## [1.0.1] - 2026-02-16
 
 ### Fixed (Review Polish)

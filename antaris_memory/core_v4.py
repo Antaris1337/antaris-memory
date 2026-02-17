@@ -40,6 +40,7 @@ from .sharding import ShardManager
 from .migration import MigrationManager
 from .indexing import IndexManager
 from .search import SearchEngine, SearchResult
+from .context_packet import ContextPacket, ContextPacketBuilder
 from .utils import atomic_write_json
 
 # Default tags to auto-extract
@@ -431,6 +432,101 @@ class MemorySystemV4:
         
         memory_texts = [m.content for m in memories]
         return self.synthesis.synthesize(memory_texts, topic)
+
+    # ── context packets ──────────────────────────────────────────────────
+
+    def build_context_packet(
+        self,
+        task: str,
+        tags: Optional[List[str]] = None,
+        category: str = None,
+        environment: Optional[Dict[str, str]] = None,
+        instructions: Optional[List[str]] = None,
+        max_memories: int = 15,
+        max_tokens: int = 4000,
+        min_relevance: float = 0.1,
+    ) -> "ContextPacket":
+        """Build a context packet for sub-agent spawning.
+
+        Searches the memory store for relevant context and packages it
+        into a structured ContextPacket that can be injected into a
+        sub-agent's prompt at spawn time.
+
+        Solves the "cold spawn" problem: sub-agents start with zero
+        context, leading to confident mistakes based on incomplete
+        information. A context packet gives them relevant onboarding.
+
+        Args:
+            task: Description of the sub-agent's task (used as search query).
+            tags: Optional tag filters to narrow search.
+            category: Optional category filter.
+            environment: Key-value pairs (e.g. {"venv": "venv-svi", "python": "3.11"}).
+            instructions: Explicit constraints for the sub-agent.
+            max_memories: Maximum memories to include (default 15).
+            max_tokens: Token budget for rendered output (default 4000).
+            min_relevance: Minimum relevance score (default 0.1).
+
+        Returns:
+            ContextPacket with .render(), .to_dict(), .trim() methods.
+
+        Example::
+
+            packet = mem.build_context_packet(
+                task="Verify antaris-guard installation",
+                environment={"venv": "venv-svi"},
+                instructions=["Check the venv, not global pip"],
+            )
+            prompt = f"{packet.render()}\\n\\nYOUR TASK: verify installation"
+        """
+        builder = ContextPacketBuilder(self)
+        return builder.build(
+            task=task,
+            tags=tags,
+            category=category,
+            environment=environment,
+            instructions=instructions,
+            max_memories=max_memories,
+            max_tokens=max_tokens,
+            min_relevance=min_relevance,
+        )
+
+    def build_context_packet_multi(
+        self,
+        task: str,
+        queries: List[str],
+        environment: Optional[Dict[str, str]] = None,
+        instructions: Optional[List[str]] = None,
+        max_memories: int = 15,
+        max_tokens: int = 4000,
+        min_relevance: float = 0.1,
+    ) -> "ContextPacket":
+        """Build a context packet from multiple search queries.
+
+        Useful when a task spans multiple topics. Deduplicates results
+        across queries and merges into a single packet.
+
+        Args:
+            task: Overall task description.
+            queries: List of search queries to run.
+            environment: Optional environment context.
+            instructions: Optional constraints.
+            max_memories: Max total memories.
+            max_tokens: Token budget.
+            min_relevance: Minimum relevance threshold.
+
+        Returns:
+            Merged ContextPacket with deduplicated results.
+        """
+        builder = ContextPacketBuilder(self)
+        return builder.build_multi(
+            task=task,
+            queries=queries,
+            environment=environment,
+            instructions=instructions,
+            max_memories=max_memories,
+            max_tokens=max_tokens,
+            min_relevance=min_relevance,
+        )
 
     # ── utility methods ─────────────────────────────────────────────────
 
