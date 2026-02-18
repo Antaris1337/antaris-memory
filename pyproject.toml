@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "antaris-memory"
-version = "1.1.0"
+version = "1.9.3"
 description = "File-based persistent memory for AI agents. Zero dependencies."
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -33,7 +33,11 @@ Repository = "https://github.com/Antaris-Analytics/antaris-memory"
 
 [project.optional-dependencies]
 embeddings = ["openai>=1.0"]
-all = ["openai>=1.0"]
+mcp = ["mcp>=1.0"]
+all = ["openai>=1.0", "mcp>=1.0"]
+
+[project.scripts]
+antaris-memory-mcp = "antaris_memory.mcp_server:main"
 
 [tool.setuptools.packages.find]
 include = ["antaris_memory*"]

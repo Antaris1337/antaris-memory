@@ -15,7 +15,7 @@ Usage:
     mem.save()
 """
 
-__version__ = "1.1.0"
+__version__ = "1.9.3"
 
 # Core
 from antaris_memory.core_v4 import MemorySystemV4 as MemorySystem
@@ -48,11 +48,32 @@ from antaris_memory.search import SearchEngine, SearchResult
 # Context Packets (v1.1)
 from antaris_memory.context_packet import ContextPacket, ContextPacketBuilder
 
+# Memory Types + Namespace Isolation (Sprint 2 + Sprint 8)
+from antaris_memory.memory_types import MEMORY_TYPE_CONFIGS, get_type_config
+from antaris_memory.namespace import NamespacedMemory, NamespaceManager
+
+# Sprint 3 — Semantic utilities
+from antaris_memory.utils import cosine_similarity
+
 # Backward compatibility - import legacy core if needed
 try:
     from antaris_memory.core import MemorySystem as LegacyMemorySystem
 except ImportError:
     LegacyMemorySystem = None
+
+# MCP Server (optional — requires 'mcp' package)
+try:
+    from antaris_memory.mcp_server import create_server as create_mcp_server
+    MCP_AVAILABLE = True
+except ImportError:
+    # mcp package not installed — provide a helpful stub
+    MCP_AVAILABLE = False
+
+    def create_mcp_server(*args, **kwargs):  # type: ignore[misc]
+        """Stub: install 'mcp' to use the MCP server. ``pip install mcp``"""
+        raise ImportError(
+            "The 'mcp' package is required. Install with: pip install mcp"
+        )
 
 __all__ = [
     "MemorySystem",
@@ -96,4 +117,21 @@ __all__ = [
     # Context Packets (v1.1)
     "ContextPacket",
     "ContextPacketBuilder",
+
+    # Sprint 2 — Memory Types
+    "MEMORY_TYPE_CONFIGS",
+    "get_type_config",
+
+    # Sprint 8 — Namespace Isolation
+    "NamespacedMemory",
+    "NamespaceManager",
+
+    # Sprint 3 — Hybrid Semantic Search
+    "cosine_similarity",   # pure-stdlib cosine similarity utility
+    # MemorySystem.set_embedding_fn(fn)  — plug in an embedding callable
+    # MemorySystem.search(...)           — uses hybrid BM25+cosine when fn is set
+
+    # Sprint 5 — MCP Server
+    "create_mcp_server",
+    "MCP_AVAILABLE",
 ]
