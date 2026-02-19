@@ -1,51 +1,33 @@
-# Antaris Memory
+# antaris-memory
 
 **Production-ready file-based persistent memory for AI agents. Zero dependencies (core).**
 
-Store, search, decay, and consolidate agent memories using only the Python standard library. Sharded storage for scalability, fast search indexes, automatic schema migration. No vector databases, no infrastructure, no API keys.
+Store, search, decay, and consolidate agent memories using only the Python standard library. Sharded storage for scalability, fast search indexes, namespace isolation, MCP server support, and automatic schema migration. No vector databases, no infrastructure, no API keys.
 
 [![PyPI](https://img.shields.io/pypi/v/antaris-memory)](https://pypi.org/project/antaris-memory/)
 [![Tests](https://github.com/Antaris-Analytics/antaris-memory/actions/workflows/tests.yml/badge.svg)](https://github.com/Antaris-Analytics/antaris-memory/actions/workflows/tests.yml)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
-## What's New in v1.0.0
+## What's New in v2.1.0
 
-- **BM25-inspired search** — proper relevance ranking with IDF weighting. No more wall of 0.50 scores.
-- **File locking** — cross-platform `os.mkdir()`-based locks prevent concurrent writer data loss
-- **Optimistic conflict detection** — mtime/hash tracking catches stale read-modify-write patterns
-- **78 tests** — comprehensive coverage across search, locking, versioning, and all core features
+- **Production Cleanup API** — `purge()`, `rebuild_indexes()`, `wal_flush()`, `wal_inspect()` — bulk removal, index repair, and WAL management without manual shard surgery (see [Production Cleanup API](#-production-cleanup-api-v210))
+- **WAL subsystem** — write-ahead log for safe, fast ingestion; auto-flushes every 50 appends or at 1 MB; crash-safe replay on startup
+- **LRU read cache** — Sprint 11 search caching with access-count boosting; configurable size via `cache_max_entries`
+- **`purge()` glob patterns** — `source="pipeline:pipeline_*"` removes all memories from any pipeline session at once
+
+Previous v2.0.0 highlights (still fully available):
+
+- **MCP Server** — expose your memory workspace as MCP tools via `create_mcp_server()` (requires `pip install mcp`)
+- **Hybrid semantic search** — plug in any embedding function with `set_embedding_fn(fn)`; BM25 and cosine blend automatically
+- **Memory types** — typed ingestion: `episodic`, `semantic`, `procedural`, `preference`, `mistake` — each with recall priority boosts
+- **Namespace isolation** — `NamespacedMemory` and `NamespaceManager` for multi-tenant memory with hard boundaries
+- **Context packets** — `build_context_packet()` packages relevant memories for sub-agent injection with token budgeting
+- 293 tests (all passing)
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
-## What It Does
-
-- **Sharded storage** for production scalability (10,000+ memories, sub-second search)
-- **Fast search indexes** (full-text, tags, dates) stored as transparent JSON files
-- **Automatic schema migration** from single-file to sharded format with rollback
-- **Multi-agent shared memory** pools with namespace isolation and access controls
-- Retrieval weighted by **recency × importance × access frequency** ([Ebbinghaus-inspired](https://en.wikipedia.org/wiki/Forgetting_curve) decay)
-- **[Input gating](#input-gating-p0p3)** classifies incoming content by priority (P0–P3) and drops ephemeral noise at intake
-- Detects contradictions between stored memories using deterministic rule-based comparison
-- Runs fully offline — zero network calls, zero tokens, zero API keys
-
-## What It Doesn't Do
-
-- **Not a vector database** — no embeddings. Search uses TF-IDF-style keyword matching on an inverted index, not semantic similarity. If you need "find memories *similar in meaning*," this isn't the right tool yet.
-- **Not a knowledge graph** — flat memory store with metadata indexing. No entity relationships or graph traversal.
-- **Not semantic** — contradiction detection compares normalized statements using explicit conflict rules (negation, numeric disagreement), not inference. It will not catch contradictions phrased differently.
-- **Not LLM-dependent** — all operations are deterministic. No model calls, no prompt engineering.
-- **Not infinitely scalable** — JSON file storage works well up to ~50,000 memories per workspace. Beyond that, you'll want a database. We're honest about this because we'd rather you succeed than discover limits in production.
-
-## Design Goals
-
-| Goal | Rationale |
-|------|-----------|
-| Deterministic | Same input → same output. No model variance. |
-| Offline | No network, no API keys, no phoning home. |
-| Minimal surface area | One class (`MemorySystem`), obvious method names. |
-| No hidden processes | Consolidation and synthesis run only when called. |
-| Transparent storage | Plain JSON files. Inspect with any text editor. |
+---
 
 ## Install
 
@@ -53,209 +35,393 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 pip install antaris-memory
 ```
 
+---
+
 ## Quick Start
 
 ```python
 from antaris_memory import MemorySystem
 
 mem = MemorySystem("./workspace", half_life=7.0)
-mem.load()  # Load existing state (no-op if first run)
+mem.load()  # No-op on first run; auto-migrates old formats
 
 # Store memories
 mem.ingest("Decided to use PostgreSQL for the database.",
            source="meeting-notes", category="strategic")
-mem.ingest("The API costs $500/month — too expensive.",
-           source="review", category="operational")
 
-# Search (BM25 ranking — confidence varies by relevance)
+# Typed helpers
+mem.ingest_fact("PostgreSQL supports JSON natively")
+mem.ingest_preference("User prefers concise explanations")
+mem.ingest_mistake("Forgot to close DB connections in worker threads")
+mem.ingest_procedure("Deploy: push to main → CI runs → auto-deploy to staging")
+
+# Input gating — drops ephemeral noise (P3) before storage
+mem.ingest_with_gating("Decided to switch to Redis for caching", source="chat")
+mem.ingest_with_gating("thanks for the update!", source="chat")  # → dropped (P3)
+
+# Search (BM25; hybrid BM25+cosine if embedding fn set)
 for r in mem.search("database decision"):
     print(f"[{r.confidence:.2f}] {r.content}")
-# → [1.00] Decided to use PostgreSQL for the database.
-# → [0.88] Database backup strategy needs review.
 
-# Detailed search with score explanations
-for r in mem.search("database decision", explain=True):
-    print(f"[{r.relevance:.2f}] {r.content[:60]}  ({r.explanation})")
-
-# Temporal queries
-mem.on_date("2026-02-14")
-mem.narrative(topic="database migration")
-
-# Selective deletion
-mem.forget(entity="John Doe")       # GDPR-ready, with audit trail
-mem.forget(before_date="2025-01-01")
-
-# Background consolidation
-report = mem.consolidate()
-
+# Save
 mem.save()
 ```
 
-## Search Quality (v1.0)
+---
 
-Search uses BM25-inspired ranking with IDF weighting, field boosting, and length normalization. Scores are normalized to 0.0–1.0:
+## 🧹 Production Cleanup API (v2.1.0)
+
+These four methods replace manual shard surgery for production maintenance.
+Use them after bulk imports, pipeline restarts, or to clean up test data.
+
+### `purge()` — Bulk removal with glob patterns
+
+Remove memories by source, content substring, or custom predicate. The WAL is
+filtered too, so purged entries cannot be replayed on the next `load()`.
 
 ```python
-results = mem.search("PostgreSQL database migration", explain=True)
+# Remove all memories from a specific pipeline session
+result = mem.purge(source="pipeline:pipeline_abc123")
+print(f"Removed {result['removed']} memories, {result['wal_removed']} WAL entries")
+
+# Glob pattern — remove ALL pipeline sessions at once
+result = mem.purge(source="pipeline:pipeline_*")
+
+# Remove by content substring (case-insensitive)
+result = mem.purge(content_contains="context_packet")
+
+# Custom predicate (OR logic — removes if ANY criterion matches)
+result = mem.purge(
+    source="openclaw:auto",
+    content_contains="symlink mismatch",
+)
+
+# Always persist after purge
+mem.save()
 ```
 
-| Score | Content | Why |
-|-------|---------|-----|
-| 1.00 | PostgreSQL migration completed successfully. | Matched: postgresql, migration |
-| 0.88 | Decided to use PostgreSQL for the database. | Matched: postgresql, database |
-| 0.33 | Database backup strategy needs review. | Matched: database (single term, lower IDF) |
+Return value:
+```python
+{
+    "removed": 10,        # from in-memory set
+    "wal_removed": 2,     # from WAL file
+    "total": 12,
+    "audit": {
+        "operation": "purge",
+        "count": 12,
+        "sources": ["pipeline:pipeline_abc123"],
+        "timestamp": "2026-02-19T..."
+    }
+}
+```
 
-Previous versions returned flat 0.50 confidence for all results. v1.0 differentiates by term rarity (IDF), exact phrase matching (1.5x boost), tag matches (1.2x), and decay weighting.
+### `rebuild_indexes()` — Repair search indexes after bulk operations
 
-More examples in the [`examples/`](examples/) directory:
-- [`quickstart.py`](examples/quickstart.py) — basic usage
-- [`openclaw_integration.py`](examples/openclaw_integration.py) — OpenClaw agent integration
-- [`langchain_integration.py`](examples/langchain_integration.py) — LangChain memory backend
+Call after any bulk change (purge, manual shard edits, imports) to ensure the
+search index matches live data.
+
+```python
+result = mem.rebuild_indexes()
+print(f"Indexed {result['memories']} memories, {result['words_indexed']} words")
+# → {"memories": 9990, "words_indexed": 5800, "tags": 24}
+```
+
+### `wal_flush()` — Force-flush WAL to shard files
+
+Normally the WAL auto-flushes. Call this explicitly before making backups,
+running migrations, or reading shard files directly.
+
+```python
+flushed = mem.wal_flush()
+print(f"Flushed {flushed} pending WAL entries to shards")
+```
+
+### `wal_inspect()` — Health check without mutating state
+
+```python
+status = mem.wal_inspect()
+# {
+#     "pending_entries": 14,
+#     "size_bytes": 8192,
+#     "sample": ["content preview 1...", "content preview 2..."]
+# }
+print(f"WAL pending: {status['pending_entries']} entries ({status['size_bytes']} bytes)")
+```
+
+### Typical production maintenance flow
+
+```python
+from antaris_memory import MemorySystem
+
+mem = MemorySystem("./workspace")
+mem.load()
+
+# 1. Inspect WAL health
+status = mem.wal_inspect()
+if status["pending_entries"] > 100:
+    print(f"WAL has {status['pending_entries']} pending — flushing...")
+    mem.wal_flush()
+
+# 2. Purge stale/unwanted data
+result = mem.purge(source="pipeline:pipeline_old_session_*")
+print(f"Purged {result['total']} stale entries")
+
+# 3. Rebuild indexes after purge
+index_result = mem.rebuild_indexes()
+print(f"Re-indexed {index_result['memories']} memories")
+
+# 4. Persist
+mem.save()
+```
+
+---
+
+## OpenClaw Integration
+
+antaris-memory ships as a native OpenClaw plugin (`antaris-memory`). Once
+enabled, the plugin fires automatically before and after each agent turn:
+
+- `before_agent_start` — searches memory for relevant context, injects into agent prompt
+- `agent_end` — ingests the turn into persistent memory
+
+```bash
+openclaw plugins enable antaris-memory
+```
+
+Also ships with an MCP server for any MCP-compatible host:
+
+```python
+from antaris_memory import create_mcp_server  # pip install mcp
+server = create_mcp_server(workspace="./memory")
+server.run()  # MCP tools: memory_search, memory_ingest, memory_consolidate, memory_stats
+```
+
+---
+
+## What It Does
+
+- **Sharded storage** for production scalability (10,000+ memories, sub-second search)
+- **Fast search indexes** (full-text, tags, dates) stored as transparent JSON files
+- **Automatic schema migration** from single-file to sharded format with rollback
+- **Multi-agent shared memory** pools with namespace isolation and access controls
+- Retrieval weighted by **recency × importance × access frequency** (Ebbinghaus-inspired decay)
+- **Input gating** classifies incoming content by priority (P0–P3) and drops ephemeral noise at intake
+- Detects contradictions between stored memories using deterministic rule-based comparison
+- Runs fully offline — zero network calls, zero tokens, zero API keys
+
+## What It Doesn't Do
+
+- **Not a vector database** — no embeddings by default. Core search uses BM25 keyword ranking. Semantic search requires you to supply an embedding function (`set_embedding_fn(fn)`) — we never make that call for you.
+- **Not a knowledge graph** — flat memory store with metadata indexing. No entity relationships or graph traversal.
+- **Not semantic by default** — contradiction detection compares normalized statements using explicit conflict rules, not inference.
+- **Not LLM-dependent** — all operations are deterministic. No model calls, no prompt engineering.
+- **Not infinitely scalable** — JSON file storage works well up to ~50,000 memories per workspace.
+
+---
+
+## Memory Types
+
+```python
+mem.ingest("Deploy: push to main, CI runs, auto-deploy to staging",
+           memory_type="procedural")   # High recall boost for how-to queries
+mem.ingest_fact("PostgreSQL supports JSONB indexing")   # Semantic memory
+mem.ingest_preference("User prefers Python examples")   # Preference memory
+mem.ingest_mistake("Forgot to handle connection timeout")  # Mistake memory
+mem.ingest_procedure("Run pytest from venv, not global pip")  # Procedure
+```
+
+| Type | Use for | Recall boost |
+|------|---------|-------------|
+| `episodic` | Events, decisions, meeting notes | Normal |
+| `semantic` | Facts, concepts, general knowledge | Medium |
+| `procedural` | How-to steps, runbooks | High |
+| `preference` | User preferences, style notes | High |
+| `mistake` | Errors to avoid, lessons learned | High |
+
+---
+
+## Hybrid Semantic Search
+
+```python
+import openai
+
+def my_embed(text: str) -> list[float]:
+    resp = openai.embeddings.create(model="text-embedding-3-small", input=text)
+    return resp.data[0].embedding
+
+mem.set_embedding_fn(my_embed)  # BM25+cosine hybrid activates automatically
+
+# Or use a local model
+import ollama
+mem.set_embedding_fn(
+    lambda text: ollama.embeddings(model="nomic-embed-text", prompt=text)["embedding"]
+)
+```
+
+When no embedding function is set, search uses BM25 only (zero API calls).
+
+---
 
 ## Input Gating (P0–P3)
 
-**Input gating** classifies content at intake by priority level. Low-value data (greetings, filler, acknowledgments) never enters storage, keeping memory clean without manual curation.
-
 ```python
 mem.ingest_with_gating("CRITICAL: API key compromised", source="alerts")
-# → P0 (critical) → stored in strategic tier
+# → P0 (critical) → stored with confidence 0.9
 
 mem.ingest_with_gating("Decided to switch to PostgreSQL", source="meeting")
-# → P1 (operational) → stored in operational tier
+# → P1 (operational) → stored
 
 mem.ingest_with_gating("thanks for the update!", source="chat")
-# → P3 (ephemeral) → dropped, not stored
+# → P3 (ephemeral) → dropped silently
 ```
 
 | Level | Category | Stored | Examples |
 |-------|----------|--------|----------|
-| P0 | Strategic | ✅ | Security alerts, errors, deadlines, financial commitments |
+| P0 | Strategic | ✅ | Security alerts, errors, deadlines |
 | P1 | Operational | ✅ | Decisions, assignments, technical choices |
-| P2 | Tactical | ✅ | Background info, research, general discussion |
+| P2 | Tactical | ✅ | Background info, research |
 | P3 | — | ❌ | Greetings, acknowledgments, filler |
 
-Classification uses keyword and pattern matching — no LLM calls. It's fast (0.177ms avg) but not perfect. Edge cases exist; when in doubt, it errs toward storing.
+Classification: keyword and pattern matching — no LLM calls. 0.177ms avg per input.
 
-## Knowledge Synthesis
+---
 
-**Knowledge synthesis** identifies gaps in stored knowledge and integrates new research. It scans existing memories for topics mentioned frequently but lacking detail, then suggests targeted research.
-
-```python
-# What does the agent not know enough about?
-suggestions = mem.research_suggestions(limit=5)
-# → [{"topic": "token optimization", "reason": "mentioned 3x, no details", "priority": "P1"}, ...]
-
-# Integrate external findings
-report = mem.synthesize(research_results={
-    "token optimization": "Context window management techniques..."
-})
-```
-
-## Memory Decay
-
-Memories fade over time unless reinforced by access:
-
-```
-score = importance × 2^(-age / half_life) + reinforcement
-```
-
-- Fresh memories score high
-- Unused memories decay toward zero
-- Accessed memories are automatically reinforced (each search hit boosts the score)
-- Below-threshold memories are candidates for compression
-
-## Consolidation
-
-Run periodically to maintain memory health:
+## Namespace Isolation
 
 ```python
-report = mem.consolidate()
+from antaris_memory import NamespacedMemory, NamespaceManager
+
+manager = NamespaceManager("./workspace")
+agent_a = manager.create_namespace("agent-a")
+agent_b = manager.create_namespace("agent-b")
+
+ns = NamespacedMemory("project-alpha", "./workspace")
+ns.load()
+ns.ingest("Alpha-specific decision")
+results = ns.search("decision")
 ```
 
-**Sample output** (10 memories, 2 near-duplicates, 3 topic clusters):
+---
 
-```json
-{
-  "timestamp": "2026-02-16T02:23:58",
-  "total": 10,
-  "active": 10,
-  "archive_candidates": 0,
-  "duplicates": 0,
-  "clusters": 3,
-  "contradictions": 0,
-  "top_clusters": {
-    "postgresql": ["4d8c1f76", "9178bfd3"],
-    "cost": ["a0811e1b", "5b42672b"],
-    "$500": ["a0811e1b", "5b42672b"]
-  }
-}
+## Context Packets (Sub-Agent Injection)
+
+```python
+# Single-query context packet
+packet = mem.build_context_packet(
+    task="Debug the authentication flow",
+    tags=["auth", "security"],
+    max_memories=10,
+    max_tokens=2000,
+    include_mistakes=True,
+)
+print(packet.render("markdown"))  # → structured markdown for prompt injection
+
+# Multi-query with deduplication
+packet = mem.build_context_packet_multi(
+    task="Fix performance issues",
+    queries=["database bottleneck", "slow queries", "caching strategy"],
+    max_tokens=3000,
+)
+packet.trim(max_tokens=1500)
 ```
 
-- Finds and merges near-duplicate memories (e.g., "Chose PostgreSQL" and "PostgreSQL selected as database")
-- Discovers topic clusters (memories that reference the same subjects)
-- Flags contradictions (e.g., "API costs are reasonable" vs "API costs too much" — when phrased with explicit negation)
-- Suggests memories for archival (old, low-importance, rarely accessed)
+---
+
+## Selective Forgetting (GDPR-ready)
+
+```python
+audit = mem.forget(entity="John Doe")       # Remove by entity
+audit = mem.forget(topic="project alpha")   # Remove by topic
+audit = mem.forget(before_date="2025-01-01")  # Remove old entries
+# Audit trail written to memory_audit.json
+```
+
+---
+
+## Shared Memory Pools
+
+```python
+from antaris_memory import SharedMemoryPool, AgentPermission
+
+pool = SharedMemoryPool("./shared", pool_name="team-alpha")
+pool.grant("agent-1", AgentPermission.READ_WRITE)
+pool.grant("agent-2", AgentPermission.READ_ONLY)
+
+mem_1 = pool.open("agent-1")
+mem_1.ingest("Deployed new API endpoint")
+
+mem_2 = pool.open("agent-2")
+results = mem_2.search("API deployment")
+```
+
+---
 
 ## Concurrency
 
-Multiple processes can safely read and write to the same memory workspace. Concurrency guarantees apply to writers using Antaris Memory's locking utilities. If external tools modify workspace files without respecting locks, correctness is not guaranteed.
-
-### File Locking
-
 ```python
-from antaris_memory import FileLock
+from antaris_memory import FileLock, VersionTracker
 
-# Exclusive access to a resource
+# Exclusive write access (atomic on all platforms including network filesystems)
 with FileLock("/path/to/shard.json", timeout=10.0):
     data = load(shard)
     modify(data)
     save(shard, data)
-
-# Non-blocking try
-lock = FileLock("/path/to/shard.json")
-if lock.acquire(blocking=False):
-    try:
-        ...
-    finally:
-        lock.release()
 ```
 
-Locks use `os.mkdir()` — atomic on all platforms, works on network filesystems, zero dependencies. Stale locks from crashed processes are automatically detected and broken (by age or dead PID).
+---
 
-### Optimistic Conflict Detection
+## Storage Format
 
-For read-heavy workloads where locking overhead isn't worth it:
-
-```python
-from antaris_memory import VersionTracker
-
-tracker = VersionTracker()
-
-# Snapshot before reading
-version = tracker.snapshot("/path/to/data.json")
-data = load(data_path)
-modify(data)
-
-# Check before writing — raises ConflictError if another process modified the file
-tracker.check(version)
-save(data_path, data)
-
-# Or use the retry helper:
-tracker.safe_update("/path/to/data.json", lambda d: {**d, "count": d["count"] + 1})
+```
+workspace/
+├── shards/
+│   ├── 2026-02-strategic.json
+│   ├── 2026-02-operational.json
+│   └── 2026-01-tactical.json
+├── indexes/
+│   ├── search_index.json
+│   ├── tag_index.json
+│   └── date_index.json
+├── .wal/
+│   └── pending.jsonl          # Write-ahead log (auto-managed)
+├── access_counts.json          # Access-frequency tracker
+├── migrations/history.json
+└── memory_audit.json           # Deletion audit trail (GDPR)
 ```
 
-### Safety Stack
+Plain JSON files. Inspect or edit with any text editor.
 
-All JSON writes use `atomic_write_json()` which combines:
-1. **Atomic writes** (tmpfile → fsync → os.replace) — prevents torn files
-2. **File locks** (os.mkdir) — prevents lost updates from concurrent writers
-3. **Directory fsync** (POSIX) — crash-consistent renames
+---
 
-To opt out of locking for single-process workloads: `atomic_write_json(path, data, lock=False)`.
+## Architecture
+
+```
+MemorySystem (v2.1)
+├── ShardManager         — Date/topic sharding
+├── IndexManager         — Full-text, tag, and date indexes
+│   ├── SearchIndex      — BM25 inverted index
+│   ├── TagIndex         — Tag → hash mapping
+│   └── DateIndex        — Date range queries
+├── SearchEngine         — BM25 + optional cosine hybrid
+├── WALManager           — Write-ahead log (crash-safe ingestion)
+├── ReadCache            — LRU search result cache
+├── AccessTracker        — Per-entry access-count boosting
+├── PerformanceMonitor   — Timing/counter stats
+├── MigrationManager     — Schema versioning with rollback
+├── InputGate            — P0-P3 classification at intake
+├── DecayEngine          — Ebbinghaus forgetting curves
+├── ConsolidationEngine  — Dedup, clustering, contradiction detection
+├── ForgettingEngine     — Selective deletion with audit
+├── SharedMemoryPool     — Multi-agent coordination
+├── NamespaceManager     — Multi-tenant isolation
+└── ContextPacketBuilder — Sub-agent context injection
+```
+
+---
 
 ## Benchmarks
 
-Measured on Apple M4, Python 3.14 (beta). Results on Python 3.9–3.13 will be comparable — no version-specific optimizations are used. Reproducible via [`scripts/ollama_benchmark.py`](scripts/ollama_benchmark.py).
+Measured on Apple M4, Python 3.14.
 
 | Memories | Ingest | Search (avg) | Search (p99) | Consolidate | Disk |
 |----------|--------|-------------|-------------|-------------|------|
@@ -264,91 +430,22 @@ Measured on Apple M4, Python 3.14 (beta). Results on Python 3.9–3.13 will be c
 | 1,000 | 33.2ms (0.033ms/entry) | 3.43ms | 5.14ms | 343.3ms | 1.1MB |
 | 5,000 | 173.7ms (0.035ms/entry) | 17.10ms | 25.70ms | 4.3s | 5.6MB |
 
-*v1.0 search uses BM25 scoring with IDF weighting, field boosting, and length normalization.*
+Input gating classification: **0.177ms avg** per input.
 
-Input gating (P0–P3 classification): **0.177ms avg** per input.
+---
 
-**Scaling notes:** JSON file storage is practical up to ~50,000 memories per workspace. At that scale, expect ~50-100ms search and ~50MB on disk. Beyond that, consider sharding across multiple workspaces or migrating to a database. We chose this limit deliberately — most agent workloads generate hundreds to low thousands of memories, not millions.
-
-## Storage Format
-
-**v0.4 (sharded)** — memories are split across multiple files by date and topic:
-
-```
-workspace/
-├── shards/
-│   ├── 2026-02-strategic.json    # Strategic memories from Feb 2026
-│   ├── 2026-02-operational.json  # Operational memories from Feb 2026
-│   └── 2026-01-tactical.json     # Tactical memories from Jan 2026
-├── indexes/
-│   ├── search_index.json         # Full-text inverted index
-│   ├── tag_index.json            # Tag → memory hash lookup
-│   └── date_index.json           # Date range index
-├── migrations/
-│   └── history.json              # Applied migration log
-└── memory_audit.json             # Deletion audit trail (GDPR)
-```
-
-Each shard is a plain JSON file containing an array of memory entries:
-
-```json
-{
-  "hash": "a1b2c3d4e5f6",
-  "content": "Decided to use PostgreSQL",
-  "source": "meeting-notes",
-  "category": "strategic",
-  "created": "2026-02-15T10:00:00",
-  "importance": 1.0,
-  "confidence": 0.8,
-  "sentiment": {"strategic": 0.6},
-  "tags": ["postgresql", "deployment"]
-}
-```
-
-**v0.2/v0.3 (legacy)** — single `memory_metadata.json` file. Automatically migrated to sharded format on first v0.4 load, with backup and rollback support.
-
-Storage format may evolve between versions. Breaking changes will increment MAJOR version. See [CHANGELOG](CHANGELOG.md).
-
-## Architecture
-
-```
-MemorySystem (v1.0)
-├── ShardManager       — Distributes memories across date/topic shards
-├── IndexManager       — Full-text, tag, and date indexes for fast lookup
-│   ├── SearchIndex    — Inverted index for text search
-│   ├── TagIndex       — Tag → memory hash mapping
-│   └── DateIndex      — Date range queries
-├── MigrationManager   — Schema versioning with backup and rollback
-├── SearchEngine       — BM25-inspired ranking with IDF, phrase boost, field boost
-├── FileLock           — Cross-platform directory-based file locking
-├── VersionTracker     — Optimistic conflict detection (mtime/hash)
-├── InputGate          — P0-P3 classification at intake
-├── DecayEngine        — Ebbinghaus forgetting curves
-├── SentimentTagger    — Rule-based keyword tone tagging
-├── TemporalEngine     — Date queries and narrative building
-├── ConfidenceEngine   — Reliability scoring
-├── CompressionEngine  — Old file summarization
-├── ForgettingEngine   — Selective deletion with audit
-├── ConsolidationEngine — Dedup, clustering, contradiction detection
-└── KnowledgeSynthesizer — Gap identification and research integration
-```
-
-**Data flow:** `ingest → classify (P0-P3) → normalize → shard-route → index → persist → search (index lookup) → decay-weight → return`
-
-**Module notes:** `core_v4.py` (imported as `MemorySystem`) is the production path — sharded storage, indexes, BM25 search. `core.py` is the legacy single-file implementation, kept for backward compatibility (`from antaris_memory.core import MemorySystem as LegacyMemorySystem`). New code should always use the default import.
-
-## Works With Local Models (Ollama)
-
-All memory operations are local and deterministic — no tokens consumed, no API calls. Pair with Ollama for a fully local agent stack at zero marginal cost.
+## MCP Server
 
 ```python
-mem = MemorySystem("./workspace")
-mem.load()
-mem.ingest_with_gating("Meeting notes from standup", source="daily")
-results = mem.search("standup decisions")
+from antaris_memory import create_mcp_server  # pip install mcp
+
+server = create_mcp_server("./workspace")
+server.run()  # Stdio transport — connect from Claude Desktop, Cursor, etc.
 ```
 
-On a Mac Mini (32GB) running Ollama for inference and antaris-memory for persistence, your entire agent stack runs locally. On a Mac Studio (256GB), you can run 70B+ models alongside thousands of indexed memories with sub-millisecond lookups.
+MCP tools exposed: `memory_search`, `memory_ingest`, `memory_consolidate`, `memory_stats`.
+
+---
 
 ## Running Tests
 
@@ -358,54 +455,52 @@ cd antaris-memory
 python -m pytest tests/ -v
 ```
 
-All 78 tests pass with zero external dependencies. No test fixtures, no mocking libraries, no network access.
+All 293 tests pass with zero external dependencies.
 
-## Migrating from v0.x
+---
 
-Upgrading is automatic. Your existing workspace loads without changes:
+## Migrating from v2.0.0
 
-```python
-# Same API — just upgrade the package
-pip install antaris-memory==1.0.0
+No breaking changes. The new `purge()`, `rebuild_indexes()`, `wal_flush()`, and
+`wal_inspect()` methods are additive. Existing workspaces load automatically —
+no migration required.
 
-# Existing workspaces load automatically
-mem = MemorySystem("./existing_workspace")
-mem.load()  # Auto-detects v0.2/v0.3/v0.4 format, migrates if needed, rebuilds search index
+```bash
+pip install --upgrade antaris-memory
 ```
 
-- **v0.2/v0.3 → v1.0**: Single-file format auto-migrates to sharded storage on first load (with backup)
-- **v0.4 → v1.0**: No migration needed. Search index rebuilds automatically.
-- **Search results**: `confidence` now reflects actual relevance (0.0-1.0) instead of static 0.50. Code using `r.confidence` will see better values, not different types.
-- **New `explain=True`**: Optional — returns `SearchResult` objects instead of `MemoryEntry`. Existing code unaffected.
+## Migrating from v1.x
+
+```python
+# Existing workspaces load automatically — no changes required
+mem = MemorySystem("./existing_workspace")
+mem.load()  # Auto-detects format, migrates if needed
+```
+
+---
 
 ## Zero Dependencies (Core)
 
-The core package uses only the Python standard library — no install-time dependencies. An optional `[embeddings]` extra (`pip install antaris-memory[embeddings]`) installs `openai` for future embedding-based search (not yet implemented in core — planned for v1.1). All current operations (ingest, search, decay, consolidation) are fully deterministic with no external calls.
+The core package uses only the Python standard library. Optional extras:
 
-## Comparison
+- `pip install mcp` — enables `create_mcp_server()`
+- Supply your own embedding function to `set_embedding_fn()` — any callable returning `list[float]` works (OpenAI, Ollama, sentence-transformers, etc.)
 
-| | Antaris Memory | [LangChain Memory](https://python.langchain.com/docs/modules/memory/) | [Mem0](https://github.com/mem0ai/mem0) | [Zep](https://github.com/getzep/zep) |
-|---|---|---|---|---|
-| Search ranking | ✅ [BM25 with IDF](#search-quality-v10) | ❌ Exact match | ✅ Embeddings | ✅ Embeddings |
-| Input gating | ✅ [P0-P3](#input-gating-p0p3) | ❌ | ❌ | ❌ |
-| Knowledge synthesis | ✅ [Gap detection](#knowledge-synthesis) | ❌ | ❌ | ❌ |
-| No database required | ✅ | ❌ | ❌ | ❌ |
-| Memory decay | ✅ [Ebbinghaus](#memory-decay) | ❌ | ❌ | ⚠️ Temporal graphs |
-| Tone tagging | ✅ Rule-based keywords | ❌ | ❌ | ✅ NLP |
-| Temporal queries | ✅ | ❌ | ❌ | ✅ |
-| Contradiction detection | ✅ [Rule-based](#consolidation) | ❌ | ❌ | ⚠️ Fact evolution |
-| Selective forgetting | ✅ With audit | ❌ | ⚠️ Invalidation | ⚠️ Invalidation |
-| Infrastructure needed | None | Redis/PG | Vector + KV + Graph | PostgreSQL + Vector |
-
-**Honest caveat:** LangChain, Mem0, and Zep offer features we don't — embeddings-based semantic search, graph relationships, real-time sync. They require more infrastructure but may be the right choice if you need those capabilities. Antaris Memory is for teams that want a simple, transparent, offline-first memory primitive.
+---
 
 ## Part of the Antaris Analytics Suite
 
 - **antaris-memory** — Persistent memory for AI agents (this package)
-- **[antaris-router](https://pypi.org/project/antaris-router/)** — Adaptive model routing with outcome learning
+- **[antaris-router](https://pypi.org/project/antaris-router/)** — Adaptive model routing with SLA enforcement
 - **[antaris-guard](https://pypi.org/project/antaris-guard/)** — Security and prompt injection detection
 - **[antaris-context](https://pypi.org/project/antaris-context/)** — Context window optimization
+- **[antaris-pipeline](https://pypi.org/project/antaris-pipeline/)** — Agent orchestration pipeline
 
 ## License
 
-Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
+Apache 2.0 — see [LICENSE](LICENSE) for details.
+
+---
+
+**Built with ❤️ by Antaris Analytics**  
+*Deterministic infrastructure for AI agents*
