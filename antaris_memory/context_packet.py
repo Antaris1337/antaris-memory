@@ -8,29 +8,36 @@ A ContextPacket bundles relevant memories, environment details, and
 task-specific context into a structured block that can be injected
 into a sub-agent's prompt at spawn time.
 
+Sprint 2 additions
+------------------
+* ``pitfalls`` field — list of Known Pitfall strings from mistake memories.
+* ``ContextPacketBuilder.build()`` gains ``include_mistakes=True`` parameter.
+  When enabled, relevant mistake memories are surfaced in a "Known Pitfalls"
+  section with the format:
+    ⚠️ Known Pitfall: Last time this was attempted, <what_happened>.
+    Correction: <correction>
+
 Usage:
     from antaris_memory import MemorySystem
 
     mem = MemorySystem("./workspace")
     mem.load()
 
-    # Build a context packet for a sub-agent task
     packet = mem.build_context_packet(
         task="Verify antaris-guard installation in venv-svi",
         tags=["antaris-guard", "installation"],
         environment={"venv": "venv-svi", "python": "3.11"},
         max_memories=10,
         max_tokens=2000,
+        include_mistakes=True,   # Sprint 2 — default True
     )
 
-    # Inject into sub-agent prompt
     prompt = f\""\"
     {packet.render()}
 
     YOUR TASK: {task_description}
     \""\"
 
-    # Or get it as a dict for structured passing
     data = packet.to_dict()
 """
 
@@ -46,12 +53,10 @@ from typing import Any, Dict, List, Optional
 class ContextPacket:
     """A structured context bundle for sub-agent spawning.
 
-    Contains relevant memories, environment details, and metadata
-    needed for a sub-agent to operate with proper context.
-
     Attributes:
         task: The task description this packet was built for.
-        memories: List of (content, score, source, category) tuples.
+        memories: List of (content, score, source, category) dicts.
+        pitfalls: Sprint 2 — list of '⚠️ Known Pitfall: …' strings.
         environment: Key-value pairs describing the execution environment.
         instructions: Explicit instructions or constraints for the sub-agent.
         metadata: Build metadata (timestamp, query used, memory count).
@@ -59,6 +64,7 @@ class ContextPacket:
 
     task: str
     memories: List[Dict[str, Any]] = field(default_factory=list)
+    pitfalls: List[str] = field(default_factory=list)       # Sprint 2
     environment: Dict[str, str] = field(default_factory=dict)
     instructions: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -94,12 +100,18 @@ class ContextPacket:
                 lines.append(f"- {inst}")
             lines.append("")
 
+        # Sprint 2 — Known Pitfalls section
+        if self.pitfalls:
+            lines.append("### Known Pitfalls")
+            for pitfall in self.pitfalls:
+                lines.append(f"- {pitfall}")
+            lines.append("")
+
         if self.memories:
             lines.append("### Relevant Context")
             for i, mem in enumerate(self.memories, 1):
                 content = mem["content"]
                 source = mem.get("source", "")
-                score = mem.get("score", 0)
                 source_tag = f" *(from: {source})*" if source else ""
                 lines.append(f"{i}. {content}{source_tag}")
             lines.append("")
@@ -131,6 +143,13 @@ class ContextPacket:
                 lines.append(f"    <instruction>{html.escape(inst)}</instruction>")
             lines.append("  </instructions>")
 
+        # Sprint 2
+        if self.pitfalls:
+            lines.append("  <known_pitfalls>")
+            for p in self.pitfalls:
+                lines.append(f"    <pitfall>{html.escape(p)}</pitfall>")
+            lines.append("  </known_pitfalls>")
+
         if self.memories:
             lines.append("  <relevant_context>")
             for mem in self.memories:
@@ -147,6 +166,7 @@ class ContextPacket:
         return {
             "task": self.task,
             "memories": self.memories,
+            "pitfalls": self.pitfalls,
             "environment": self.environment,
             "instructions": self.instructions,
             "metadata": self.metadata,
@@ -158,6 +178,7 @@ class ContextPacket:
         return cls(
             task=data.get("task", ""),
             memories=data.get("memories", []),
+            pitfalls=data.get("pitfalls", []),
             environment=data.get("environment", {}),
             instructions=data.get("instructions", []),
             metadata=data.get("metadata", {}),
@@ -169,14 +190,11 @@ class ContextPacket:
 
     def __bool__(self) -> bool:
         """True if the packet contains any context."""
-        return bool(self.memories or self.environment or self.instructions)
+        return bool(self.memories or self.pitfalls or self.environment or self.instructions)
 
     @property
     def estimated_tokens(self) -> int:
-        """Rough token estimate for the rendered packet (len/4 heuristic).
-
-        Based on markdown rendering. XML/JSON output may differ slightly.
-        """
+        """Rough token estimate for the rendered packet (len/4 heuristic)."""
         return len(self.render()) // 4
 
     def trim(self, max_tokens: int) -> "ContextPacket":
@@ -184,6 +202,7 @@ class ContextPacket:
 
         Removes memories from the tail (lowest relevance) until
         the rendered output fits within max_tokens.
+        Pitfalls are never trimmed — they are highest priority.
         """
         if self.estimated_tokens <= max_tokens:
             return self
@@ -191,6 +210,7 @@ class ContextPacket:
         trimmed = ContextPacket(
             task=self.task,
             memories=list(self.memories),
+            pitfalls=list(self.pitfalls),
             environment=dict(self.environment),
             instructions=list(self.instructions),
             metadata=dict(self.metadata),
@@ -206,7 +226,7 @@ class ContextPacket:
     def __repr__(self) -> str:
         return (
             f"<ContextPacket task='{self.task[:40]}...' "
-            f"memories={len(self.memories)} "
+            f"memories={len(self.memories)} pitfalls={len(self.pitfalls)} "
             f"~{self.estimated_tokens} tokens>"
         )
 
@@ -216,6 +236,9 @@ class ContextPacketBuilder:
 
     Pulls relevant memories via BM25 search, applies filters,
     and packages them with environment and instruction context.
+
+    Sprint 2: ``build()`` gains ``include_mistakes=True`` which proactively
+    surfaces relevant mistake memories in a "Known Pitfalls" section.
 
     Args:
         memory_system: A loaded MemorySystem instance.
@@ -235,6 +258,8 @@ class ContextPacketBuilder:
         max_tokens: int = 4000,
         min_relevance: float = 0.1,
         include_sources: bool = True,
+        include_mistakes: bool = True,       # Sprint 2
+        max_pitfalls: int = 5,               # Sprint 2
     ) -> ContextPacket:
         """Build a context packet for a sub-agent task.
 
@@ -249,40 +274,37 @@ class ContextPacketBuilder:
             instructions: Explicit instructions for the sub-agent.
             max_memories: Maximum memories to include (default 15).
             max_tokens: Token budget for the rendered packet (default 4000).
-            min_relevance: Minimum relevance score (0.0–1.0 normalized) to include.
-                Score vs relevance: score is raw BM25 output, relevance is
-                normalized to 0.0–1.0 where 1.0 = best match in the result set.
-                Filtering uses relevance; output includes raw score for debugging.
+            min_relevance: Minimum relevance score (0.0–1.0).
             include_sources: Whether to include source attribution (default True).
+            include_mistakes: Sprint 2 — surface relevant mistake memories as
+                Known Pitfalls (default True).
+            max_pitfalls: Sprint 2 — cap on pitfall entries (default 5).
 
         Returns:
             A ContextPacket ready for injection into a sub-agent prompt.
         """
-        # Validate min_relevance (0.0–1.0 scale, not percentage)
         if min_relevance > 1.0:
             raise ValueError(
                 f"min_relevance={min_relevance} looks like a percentage. "
                 f"Use 0.0–1.0 scale (e.g. 0.1 = 10%)."
             )
 
-        # Search for relevant memories using the task as query
+        # ── regular memory search ─────────────────────────────────────
         results = self.mem.search(
             query=task,
-            limit=max_memories * 3,  # Over-fetch to allow for filtering
+            limit=max_memories * 3,
             category=category,
             explain=True,
         )
 
-        # Filter by relevance and tags, build memory list
         memories = []
         for r in results:
-            # Tag filter: if tags specified, entry must have at least one matching tag
             if tags and hasattr(r.entry, "tags") and r.entry.tags:
                 entry_tags = {et.lower() for et in r.entry.tags}
                 if not any(t.lower() in entry_tags for t in tags):
                     continue
             elif tags and (not hasattr(r.entry, "tags") or not r.entry.tags):
-                continue  # Tags requested but entry has none
+                continue
             if r.relevance < min_relevance:
                 continue
             if len(memories) >= max_memories:
@@ -298,13 +320,19 @@ class ContextPacketBuilder:
 
             memories.append(mem_dict)
 
-        # Build metadata
+        # ── Sprint 2: proactive mistake surfacing ─────────────────────
+        pitfalls: List[str] = []
+        if include_mistakes:
+            pitfalls = self._collect_pitfalls(task, max_pitfalls, min_relevance)
+
+        # ── metadata ─────────────────────────────────────────────────
         metadata = {
             "built_at": datetime.now().isoformat(),
             "query": task,
             "total_memories_searched": len(self.mem.memories),
             "results_found": len(results),
             "results_included": len(memories),
+            "pitfalls_included": len(pitfalls),
         }
         if tags:
             metadata["tag_filter"] = tags
@@ -314,16 +342,59 @@ class ContextPacketBuilder:
         packet = ContextPacket(
             task=task,
             memories=memories,
+            pitfalls=pitfalls,
             environment=environment or {},
             instructions=instructions or [],
             metadata=metadata,
         )
 
-        # Trim to token budget
         if packet.estimated_tokens > max_tokens:
             packet = packet.trim(max_tokens)
 
         return packet
+
+    def _collect_pitfalls(
+        self,
+        task: str,
+        max_pitfalls: int,
+        min_relevance: float,
+    ) -> List[str]:
+        """Return a list of pitfall strings from relevant mistake memories.
+
+        Mistakes without structured type_metadata fall back to showing content.
+        """
+        from .memory_types import format_pitfall_line
+
+        # Get all mistake-type memories
+        mistake_entries = [
+            m for m in self.mem.memories
+            if getattr(m, "memory_type", "episodic") == "mistake"
+        ]
+        if not mistake_entries:
+            return []
+
+        # Score them against the task using BM25
+        results = self.mem.search(query=task, limit=max_pitfalls * 3, explain=True)
+        mistake_hashes = {m.hash for m in mistake_entries}
+
+        pitfalls = []
+        for r in results:
+            if r.entry.hash not in mistake_hashes:
+                continue
+            if r.relevance < min_relevance:
+                continue
+
+            type_meta = getattr(r.entry, "type_metadata", {}) or {}
+            if type_meta.get("what_happened"):
+                pitfalls.append(format_pitfall_line(type_meta))
+            else:
+                # Fallback: use content verbatim
+                pitfalls.append(f"⚠️ Known Pitfall: {r.entry.content}")
+
+            if len(pitfalls) >= max_pitfalls:
+                break
+
+        return pitfalls
 
     def build_multi(
         self,
@@ -334,47 +405,29 @@ class ContextPacketBuilder:
         max_memories: int = 15,
         max_tokens: int = 4000,
         min_relevance: float = 0.1,
+        include_mistakes: bool = True,      # Sprint 2
+        max_pitfalls: int = 5,
     ) -> ContextPacket:
         """Build a packet from multiple search queries.
 
         Useful when a task spans multiple topics. Deduplicates results
         by memory hash and merges into a single packet.
-
-        Args:
-            task: The overall task description.
-            queries: List of search queries to run.
-            environment: Optional environment context.
-            instructions: Optional instructions.
-            max_memories: Max total memories across all queries.
-            max_tokens: Token budget.
-            min_relevance: Minimum relevance threshold.
-
-        Returns:
-            A merged ContextPacket with deduplicated results.
         """
         seen_hashes = set()
         all_memories = []
-
         per_query_limit = max(max_memories // len(queries), 5)
 
         for query in queries:
-            results = self.mem.search(
-                query=query,
-                limit=per_query_limit * 2,
-                explain=True,
-            )
-
+            results = self.mem.search(query=query, limit=per_query_limit * 2, explain=True)
             for r in results:
                 if r.relevance < min_relevance:
                     continue
-                # Dedup by entry hash, falling back to stable content digest
                 entry_hash = getattr(r.entry, "hash", None)
                 if not entry_hash:
                     entry_hash = hashlib.sha1(r.content.encode("utf-8")).hexdigest()
                 if entry_hash in seen_hashes:
                     continue
                 seen_hashes.add(entry_hash)
-
                 all_memories.append({
                     "content": r.content,
                     "score": round(r.score, 3),
@@ -382,20 +435,32 @@ class ContextPacketBuilder:
                     "query": query,
                 })
 
-        # Sort by score descending, take top N
         all_memories.sort(key=lambda m: m["score"], reverse=True)
         all_memories = all_memories[:max_memories]
+
+        # Sprint 2: pitfalls across all queries
+        pitfalls: List[str] = []
+        if include_mistakes:
+            seen_pitfalls: set = set()
+            for query in queries:
+                for p in self._collect_pitfalls(query, max_pitfalls, min_relevance):
+                    if p not in seen_pitfalls:
+                        seen_pitfalls.add(p)
+                        pitfalls.append(p)
+            pitfalls = pitfalls[:max_pitfalls]
 
         metadata = {
             "built_at": datetime.now().isoformat(),
             "queries": queries,
             "total_memories_searched": len(self.mem.memories),
             "results_included": len(all_memories),
+            "pitfalls_included": len(pitfalls),
         }
 
         packet = ContextPacket(
             task=task,
             memories=all_memories,
+            pitfalls=pitfalls,
             environment=environment or {},
             instructions=instructions or [],
             metadata=metadata,

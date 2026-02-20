@@ -64,20 +64,34 @@ class FileLock:
         self.stale_threshold = stale_threshold
         self._held = False
     
-    def acquire(self, blocking: bool = True) -> bool:
-        """Acquire the lock.
-        
+    def acquire(self, blocking: bool = True,
+                timeout: float = None,
+                stale_timeout: float = None) -> bool:
+        """Acquire the lock, optionally overriding instance-level timeouts.
+
+        Sprint 11: *stale_timeout* lets callers specify a per-call stale
+        threshold (seconds) that overrides ``self.stale_threshold``.  A lock
+        is considered stale when its holder PID is no longer running **or**
+        when the lock is older than *stale_timeout* seconds.
+
         Args:
-            blocking: If True, wait up to self.timeout. If False, return immediately.
-            
+            blocking: If True, wait up to *timeout* (or ``self.timeout``).
+                If False, return immediately.
+            timeout: Per-call acquisition timeout in seconds.  If ``None``,
+                ``self.timeout`` is used.
+            stale_timeout: Per-call stale threshold in seconds.  If ``None``,
+                ``self.stale_threshold`` is used.
+
         Returns:
             True if lock acquired, False if non-blocking and lock unavailable.
-            
+
         Raises:
             LockTimeout: If blocking and timeout exceeded.
         """
+        eff_timeout = timeout if timeout is not None else self.timeout
+        eff_stale = stale_timeout if stale_timeout is not None else self.stale_threshold
         start = time.monotonic()
-        
+
         while True:
             try:
                 os.mkdir(self.lock_dir)
@@ -88,19 +102,19 @@ class FileLock:
                 return True
             except OSError:
                 # Lock directory exists — check if stale
-                if self._break_stale():
+                if self._break_stale(stale_threshold=eff_stale):
                     continue  # Stale lock broken, retry immediately
-                
+
                 if not blocking:
                     return False
-                
+
                 elapsed = time.monotonic() - start
-                if self.timeout is not None and elapsed >= self.timeout:
+                if eff_timeout is not None and elapsed >= eff_timeout:
                     raise LockTimeout(
                         f"Could not acquire lock on {self.path} "
-                        f"after {self.timeout:.1f}s (holder: {self._read_holder()})"
+                        f"after {eff_timeout:.1f}s (holder: {self._read_holder()})"
                     )
-                
+
                 time.sleep(self.poll_interval)
     
     def release(self):
@@ -120,11 +134,20 @@ class FileLock:
             self._held = False
     
     def _write_meta(self):
-        """Write lock holder metadata for debugging."""
+        """Write lock holder metadata for debugging.
+
+        Sprint 11: uses ISO8601 timestamp and includes ``acquired_at_ts``
+        (Unix float) for fast age comparisons without parsing.
+        """
         try:
+            now_ts = time.time()
+            from datetime import datetime, timezone
             meta = {
                 "pid": os.getpid(),
-                "acquired_at": time.time(),
+                "acquired_at": datetime.fromtimestamp(
+                    now_ts, tz=timezone.utc
+                ).isoformat(),
+                "acquired_at_ts": now_ts,   # kept for fast arithmetic
                 "path": self.path,
             }
             with open(self.meta_path, "w") as f:
@@ -141,44 +164,40 @@ class FileLock:
         except (OSError, json.JSONDecodeError, KeyError):
             return "unknown"
     
-    def _break_stale(self) -> bool:
+    def _break_stale(self, stale_threshold: float = None) -> bool:
         """Break a stale lock if the holder appears to have crashed.
-        
+
+        Sprint 11: accepts an optional *stale_threshold* override.
+
         A lock is considered stale if:
-        1. The holder.json is older than stale_threshold, OR
+
+        1. The holder.json is older than *stale_threshold* seconds, OR
         2. The holder.json doesn't exist (incomplete lock), OR
-        3. The holder PID is no longer running (POSIX only)
-        
+        3. The holder PID is no longer running (POSIX only) — checked
+           *before* the age check so crashed-process locks are broken
+           immediately regardless of age.
+
         Returns True if stale lock was broken.
         """
+        threshold = stale_threshold if stale_threshold is not None else self.stale_threshold
         try:
             if not os.path.exists(self.meta_path):
                 # Lock dir exists but no metadata — likely crashed during acquire
                 lock_age = time.time() - os.path.getmtime(self.lock_dir)
-                if lock_age > self.stale_threshold:
+                if lock_age > threshold:
                     self._force_break()
                     return True
                 return False
-            
+
             with open(self.meta_path) as f:
                 meta = json.load(f)
-            
-            acquired_at = meta.get("acquired_at", 0)
+
             holder_pid = meta.get("pid")
-            
-            # Check age
-            if time.time() - acquired_at > self.stale_threshold:
-                logger.warning(
-                    f"Breaking stale lock on {self.path} "
-                    f"(held by pid={holder_pid} for {time.time() - acquired_at:.0f}s)"
-                )
-                self._force_break()
-                return True
-            
-            # Check if holder PID is alive (POSIX only)
+
+            # Check if holder PID is alive (POSIX only) — takes priority over age
             if holder_pid and holder_pid != os.getpid():
                 try:
-                    os.kill(holder_pid, 0)  # Signal 0 = check existence
+                    os.kill(holder_pid, 0)  # Signal 0 = existence check
                 except ProcessLookupError:
                     logger.warning(
                         f"Breaking orphaned lock on {self.path} "
@@ -188,7 +207,32 @@ class FileLock:
                     return True
                 except (OSError, PermissionError):
                     pass  # Process exists but we can't signal it — not stale
-            
+
+            # Fall back to age check using stored unix timestamp
+            acquired_at_ts = meta.get("acquired_at_ts")
+            if acquired_at_ts is None:
+                # Old-format lock: try to parse from acquired_at string
+                acquired_at_raw = meta.get("acquired_at", 0)
+                if isinstance(acquired_at_raw, (int, float)):
+                    acquired_at_ts = acquired_at_raw
+                else:
+                    try:
+                        from datetime import datetime, timezone
+                        acquired_at_ts = datetime.fromisoformat(
+                            acquired_at_raw
+                        ).timestamp()
+                    except (ValueError, TypeError):
+                        acquired_at_ts = 0
+
+            lock_age = time.time() - acquired_at_ts
+            if lock_age > threshold:
+                logger.warning(
+                    f"Breaking stale lock on {self.path} "
+                    f"(held by pid={holder_pid} for {lock_age:.0f}s)"
+                )
+                self._force_break()
+                return True
+
             return False
         except (OSError, json.JSONDecodeError):
             return False

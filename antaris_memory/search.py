@@ -85,13 +85,26 @@ class SearchEngine:
         self._doc_freqs: Counter = Counter()  # term → number of docs containing it
         self._corpus_version: int = 0
         self._indexed_version: int = -1
-    
+        # Content fingerprint: lightweight hash of all memory content at index time.
+        # Detects in-place content mutations that don't change the memory count
+        # (e.g. tag updates, content edits) — fixes search index drift (Gemini review).
+        self._content_fingerprint: int = 0
+
+    @staticmethod
+    def _compute_fingerprint(memories: list) -> int:
+        """XOR hash of all memory content hashes — cheap O(n) mutation detector."""
+        fp = 0
+        for m in memories:
+            fp ^= hash(m.content)
+        return fp
+
     def build_index(self, memories: list) -> None:
         """Build IDF statistics from the memory corpus.
         
         Call this after loading/ingesting memories to enable proper ranking.
         """
         self._indexed_version = self._corpus_version
+        self._content_fingerprint = self._compute_fingerprint(memories)
         self._doc_count = len(memories)
         self._doc_freqs.clear()
         self._idf_cache.clear()
@@ -133,8 +146,12 @@ class SearchEngine:
         if not query_tokens:
             return []
         
-        # Rebuild index if needed (stale version or count mismatch)
-        if self._indexed_version != self._corpus_version or self._doc_count != len(memories):
+        # Rebuild index if stale: version mismatch, count change, or content mutation.
+        # Content fingerprint catches in-place edits that don't change memory count.
+        current_fp = self._compute_fingerprint(memories)
+        if (self._indexed_version != self._corpus_version
+                or self._doc_count != len(memories)
+                or self._content_fingerprint != current_fp):
             self.build_index(memories)
         
         results = []

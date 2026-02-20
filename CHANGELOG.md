@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.2.0] - 2026-02-20
+
+### Added — Sprint 2.4: Scoped Namespace Isolation
+- **`MemorySystem.namespace(name)`** — returns a `NamespacedMemory` proxy with full API isolation
+- **`NamespacedMemory`** — thin proxy over a dedicated `MemorySystemV4` instance; supports `ingest()`, `search()`, `get_stats()`, `clear()`, `save()`, `load()`, context packets, and all lifecycle methods
+- **Fully isolated shards/indexes** — each namespace lives in `{workspace}/namespaces/{name}/`; search in one namespace never returns results from another
+- **Lifecycle management**: `create_namespace()`, `archive_namespace()`, `delete_namespace(delete_data=True)`, `list_namespaces(include_archived=False)`
+- **Proxy lifecycle**: `ns.create()`, `ns.archive()`, `ns.delete()` delegate to the parent manager
+- **Namespace manifest** — `namespace_manifest.json` tracks status, `created_at`, `archived_at` for all namespaces
+- **Identity constants** — `TENANT_ID`, `AGENT_ID`, `CONVERSATION_ID` for standardized namespace key prefixes
+- **Backward compatible** — existing `MemorySystem()` usage without namespaces is completely unaffected
+- 35 new namespace tests (348 total, all passing)
+
+## [2.0.0] - 2026-02-18
+
+### Added — Antaris Suite 2.0 GA
+- **MCP Server** (`mcp_server.py`) — expose memory as MCP resources/tools via `create_server` (aliased as `create_mcp_server` in `__init__.py`)
+- **Hybrid Semantic Search** — `set_embedding_fn(fn)` pluggable interface; BM25+cosine blending when embedding fn is set
+- **Memory Types** — `MEMORY_TYPE_CONFIGS`, `get_type_config()`, per-type recall priority boost in BM25 scoring
+- **Namespace Isolation** — `NamespacedMemory`, `NamespaceManager` for multi-tenant agent memory
+- **Context Packets** — `ContextPacket`, `ContextPacketBuilder` for structured sub-agent context injection
+- **LRU read cache** — Sprint 11 search caching with access-count boosting
+- **Sprint 11 search** — BM25 IDF always computed over full corpus (filter-after-score; fixes IDF corruption bug)
+- 289 unit tests (all passing)
+
 ## [1.1.0] - 2026-02-17
 
 ### Added

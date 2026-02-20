@@ -2,16 +2,29 @@
 
 import hashlib
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 class MemoryEntry:
-    """Single memory unit with metadata, decay, sentiment, and confidence."""
+    """Single memory unit with metadata, decay, sentiment, and confidence.
+
+    Sprint 2 additions
+    ------------------
+    memory_type : str
+        One of "episodic", "fact", "preference", "procedure", "mistake"
+        or any custom string.  Defaults to "episodic".
+    type_metadata : dict
+        Type-specific structured data.  For mistakes this holds
+        {"what_happened": ..., "correction": ..., "root_cause": ..., "severity": ...}.
+        Empty for other types unless the caller populates it.
+    """
 
     __slots__ = (
         "content", "source", "line", "category", "created",
         "last_accessed", "access_count", "importance", "confidence",
         "sentiment", "tags", "related", "hash",
+        # Sprint 2
+        "memory_type", "type_metadata",
     )
 
     def __init__(
@@ -21,6 +34,7 @@ class MemoryEntry:
         line: int = 0,
         category: str = "general",
         created: str = None,
+        memory_type: str = "episodic",
     ):
         self.content = content
         self.source = source
@@ -37,11 +51,14 @@ class MemoryEntry:
         self.hash = hashlib.md5(
             f"{source}:{line}:{content[:100]}".encode()
         ).hexdigest()[:12]
+        # Sprint 2
+        self.memory_type: str = memory_type
+        self.type_metadata: Dict = {}
 
     # -- serialisation --------------------------------------------------------
 
     def to_dict(self) -> Dict:
-        return {
+        d = {
             "hash": self.hash,
             "content": self.content,
             "source": self.source,
@@ -56,12 +73,19 @@ class MemoryEntry:
             "tags": self.tags,
             "related": self.related,
         }
+        # Sprint 2 — only write if non-default to keep file size stable
+        if self.memory_type and self.memory_type != "episodic":
+            d["memory_type"] = self.memory_type
+        if self.type_metadata:
+            d["type_metadata"] = self.type_metadata
+        return d
 
     @classmethod
     def from_dict(cls, d: Dict) -> "MemoryEntry":
         m = cls(
             d["content"], d.get("source", ""), d.get("line", 0),
             d.get("category", "general"), d.get("created"),
+            memory_type=d.get("memory_type", "episodic"),
         )
         m.last_accessed = d.get("last_accessed", m.created)
         m.access_count = d.get("access_count", 0)
@@ -71,7 +95,11 @@ class MemoryEntry:
         m.tags = d.get("tags", [])
         m.related = d.get("related", [])
         m.hash = d.get("hash", m.hash)
+        m.type_metadata = d.get("type_metadata", {})
         return m
 
     def __repr__(self) -> str:
-        return f"<Memory {self.hash} score={self.importance:.2f} conf={self.confidence:.2f}>"
+        return (
+            f"<Memory {self.hash} type={self.memory_type} "
+            f"score={self.importance:.2f} conf={self.confidence:.2f}>"
+        )

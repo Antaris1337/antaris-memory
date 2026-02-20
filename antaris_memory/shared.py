@@ -18,7 +18,9 @@ from typing import Dict, List, Optional, Tuple
 
 from .entry import MemoryEntry
 from .decay import DecayEngine
+from .search import SearchEngine
 from .sentiment import SentimentTagger
+from .utils import atomic_write_json
 
 
 class AgentPermission:
@@ -93,6 +95,10 @@ class SharedMemoryPool:
         self._hashes: set = set()
         self._decay = DecayEngine(half_life=7.0)
         self._sentiment = SentimentTagger()
+        # Bug fix: use BM25 SearchEngine for shared pool reads instead of
+        # primitive word-overlap, closing the search quality gap vs private memory.
+        # Bug fix: BM25 SearchEngine for shared pool reads (auto-rebuilds on corpus change)
+        self._search_engine = SearchEngine()
 
         os.makedirs(self.pool_dir, exist_ok=True)
 
@@ -162,44 +168,41 @@ class SharedMemoryPool:
 
     def read(self, agent_id: str, query: str, namespace: str = None,
              limit: int = 20) -> List[MemoryEntry]:
-        """Search shared memories. Respects namespace permissions."""
+        """Search shared memories using BM25. Respects namespace permissions.
+
+        Bug fix: replaced primitive word-overlap scorer with the same BM25
+        SearchEngine used by private MemorySystem, closing the search quality
+        gap in multi-agent shared-pool scenarios.
+        """
         perm = self.permissions.get(agent_id)
         if not perm or not perm.can_read():
             return []
 
-        import re
-        q = query.lower()
-        q_words = set(re.findall(r"\w{3,}", q))
-        results = []
+        # Filter to accessible memories first
+        accessible = [
+            m for m in self.memories
+            if perm.can_access_namespace(self._get_namespace(m))
+            and (not namespace or self._get_namespace(m) == namespace)
+        ]
 
-        for m in self.memories:
-            # Check namespace access
-            m_ns = self._get_namespace(m)
-            if namespace and m_ns != namespace:
-                continue
-            if not perm.can_access_namespace(m_ns):
-                continue
+        if not accessible:
+            return []
 
-            # Score
-            c = m.content.lower()
-            score = 0.0
-            if q in c:
-                score += 3.0
-            else:
-                c_words = set(re.findall(r"\w{3,}", c))
-                overlap = len(q_words & c_words) / max(len(q_words), 1)
-                score += overlap * 2.0
+        # BM25 search with decay re-scoring.
+        # SearchEngine.search() auto-rebuilds its index when the corpus changes
+        # (tracks doc count + corpus version internally), so no manual dirty flag needed.
+        bm25_results = self._search_engine.search(query, accessible, limit=limit * 2)
+        scored = []
+        for r in bm25_results:
+            decay_score = self._decay.score(r.entry)
+            final_score = r.relevance * (0.5 + decay_score)
+            if final_score > 0:
+                scored.append((r.entry, final_score))
+                self._decay.reinforce(r.entry)
 
-            decay_score = self._decay.score(m)
-            score *= (0.5 + decay_score)
-
-            if score > 0.3:
-                results.append((m, score))
-                self._decay.reinforce(m)
-
-        results.sort(key=lambda x: x[1], reverse=True)
-        self._audit("read", agent_id, f"query={query[:50]} results={len(results)}")
-        return [m for m, _ in results[:limit]]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        self._audit("read", agent_id, f"query={query[:50]} results={len(scored)}")
+        return [m for m, _ in scored[:limit]]
 
     def propagate(self, from_agent: str, to_namespace: str,
                   query: str = None, limit: int = 10) -> int:
@@ -216,17 +219,10 @@ class SharedMemoryPool:
                           if f"agent:{from_agent}" in m.tags]
 
         if query:
-            import re
-            q = query.lower()
-            q_words = set(re.findall(r"\w{3,}", q))
-            scored = []
-            for m in agent_memories:
-                c = m.content.lower()
-                overlap = len(q_words & set(re.findall(r"\w{3,}", c)))
-                if overlap > 0:
-                    scored.append((m, overlap))
-            scored.sort(key=lambda x: x[1], reverse=True)
-            agent_memories = [m for m, _ in scored[:limit]]
+            # Use BM25 SearchEngine for consistent search quality
+            bm25 = SearchEngine()
+            bm25_results = bm25.search(query, agent_memories, limit=limit)
+            agent_memories = [r.entry for r in bm25_results]
         else:
             agent_memories = agent_memories[:limit]
 
@@ -279,9 +275,11 @@ class SharedMemoryPool:
     # ── persistence ─────────────────────────────────────────────────────
 
     def save(self) -> str:
-        """Save pool state to disk."""
+        """Save pool state to disk (Bug 3 fix: uses atomic write with FileLock)."""
+        from . import __version__ as _pkg_version  # Bug fix: add package version
         data = {
-            "version": "0.3.0",
+            "schema_version": "0.3.0",       # storage format version
+            "package_version": _pkg_version,  # antaris-memory package version
             "pool_name": self.pool_name,
             "saved_at": datetime.now().isoformat(),
             "agent_count": len(self.permissions),
@@ -292,8 +290,7 @@ class SharedMemoryPool:
             "memories": [m.to_dict() for m in self.memories],
             "conflicts": self.conflicts,
         }
-        with open(self.state_path, "w") as f:
-            json.dump(data, f, indent=2)
+        atomic_write_json(self.state_path, data)
         return self.state_path
 
     def load(self) -> int:
@@ -401,6 +398,7 @@ class SharedMemoryPool:
         return None
 
     def _audit(self, action: str, agent_id: str, detail: str = "") -> None:
+        """Append to audit log (Bug 3 fix: uses atomic write with FileLock)."""
         entry = {
             "timestamp": datetime.now().isoformat(),
             "action": action,
@@ -416,5 +414,4 @@ class SharedMemoryPool:
                 log = []
         log.append(entry)
         # Keep last 500 entries
-        with open(self.audit_path, "w") as f:
-            json.dump(log[-500:], f, indent=2)
+        atomic_write_json(self.audit_path, log[-500:])

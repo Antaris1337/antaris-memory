@@ -15,7 +15,7 @@ Usage:
     mem.save()
 """
 
-__version__ = "1.9.3"
+__version__ = "2.2.0"
 
 # Core
 from antaris_memory.core_v4 import MemorySystemV4 as MemorySystem
@@ -48,9 +48,15 @@ from antaris_memory.search import SearchEngine, SearchResult
 # Context Packets (v1.1)
 from antaris_memory.context_packet import ContextPacket, ContextPacketBuilder
 
-# Memory Types + Namespace Isolation (Sprint 2 + Sprint 8)
+# Memory Types + Namespace Isolation (Sprint 2 + Sprint 2.4)
 from antaris_memory.memory_types import MEMORY_TYPE_CONFIGS, get_type_config
-from antaris_memory.namespace import NamespacedMemory, NamespaceManager
+from antaris_memory.namespace import (
+    NamespacedMemory,
+    NamespaceManager,
+    TENANT_ID,
+    AGENT_ID,
+    CONVERSATION_ID,
+)
 
 # Sprint 3 — Semantic utilities
 from antaris_memory.utils import cosine_similarity
@@ -122,9 +128,12 @@ __all__ = [
     "MEMORY_TYPE_CONFIGS",
     "get_type_config",
 
-    # Sprint 8 — Namespace Isolation
+    # Sprint 2.4 — Namespace Isolation
     "NamespacedMemory",
     "NamespaceManager",
+    "TENANT_ID",
+    "AGENT_ID",
+    "CONVERSATION_ID",
 
     # Sprint 3 — Hybrid Semantic Search
     "cosine_similarity",   # pure-stdlib cosine similarity utility

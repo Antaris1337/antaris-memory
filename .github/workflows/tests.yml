@@ -28,4 +28,6 @@ jobs:
           pip install -e .
 
       - name: Run tests
-        run: python -m pytest tests/ -v
+        # Run from package root so root-level test files (e.g. test_v4_features.py)
+        # are included alongside tests/ — fixes CI blind-spot flagged in review.
+        run: python -m pytest . -v --ignore=examples --ignore=docs --ignore=benchmarks

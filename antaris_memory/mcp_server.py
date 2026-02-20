@@ -157,7 +157,8 @@ def create_server(memory_path: Optional[str] = None) -> "FastMCP":
             Dict with keys: stored (bool), entry_count (int).
         """
         mem = _load_memory(resolved_path)
-        added = mem.ingest(content=content, category=category)
+        # Bug fix: pass caller-supplied tags to ingest() so they are applied
+        added = mem.ingest(content=content, category=category, tags=tags or None)
         mem.save()
         return {
             "stored": added > 0,
