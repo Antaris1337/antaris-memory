@@ -15,7 +15,7 @@ Usage:
     mem.save()
 """
 
-__version__ = "2.2.0"
+__version__ = "2.4.0"
 
 # Core
 from antaris_memory.core_v4 import MemorySystemV4 as MemorySystem
@@ -57,6 +57,9 @@ from antaris_memory.namespace import (
     AGENT_ID,
     CONVERSATION_ID,
 )
+
+# Sprint 2.7 — Retrieval Feedback Loop
+from antaris_memory.feedback import RetrievalFeedback, OUTCOME_GOOD, OUTCOME_BAD, OUTCOME_NEUTRAL
 
 # Sprint 3 — Semantic utilities
 from antaris_memory.utils import cosine_similarity
@@ -134,6 +137,12 @@ __all__ = [
     "TENANT_ID",
     "AGENT_ID",
     "CONVERSATION_ID",
+
+    # Sprint 2.7 — Retrieval Feedback Loop
+    "RetrievalFeedback",
+    "OUTCOME_GOOD",
+    "OUTCOME_BAD",
+    "OUTCOME_NEUTRAL",
 
     # Sprint 3 — Hybrid Semantic Search
     "cosine_similarity",   # pure-stdlib cosine similarity utility

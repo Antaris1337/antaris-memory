@@ -25,7 +25,8 @@ import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from contextlib import contextmanager
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from .entry import MemoryEntry
 from .decay import DecayEngine
@@ -49,6 +50,7 @@ from .memory_types import (
 )
 from .utils import atomic_write_json
 from .performance import ReadCache, WALManager, PerformanceMonitor, AccessTracker
+from .feedback import RetrievalFeedback
 
 # Default tags to auto-extract
 _DEFAULT_TAG_TERMS = [
@@ -129,6 +131,12 @@ class MemorySystemV4(NamespaceManager):
         self._embedding_fn: Optional[Callable[[str], List[float]]] = None
         self._embedding_cache: Dict[str, List[float]] = {}  # key -> vector, bounded to 1000
 
+        # Sprint 2.7 — retrieval feedback loop
+        self._feedback = RetrievalFeedback(self.workspace)
+
+        # Sprint 2.8 — bulk ingest mode flag (defers index rebuilds)
+        self._bulk_mode_active: bool = False
+
         # Initialize system
         self._initialize()
 
@@ -180,11 +188,11 @@ class MemorySystemV4(NamespaceManager):
         # Save shard index
         self.shard_manager.index.save_index()
         
-        # Update search indexes
-        if self.use_indexing and self.index_manager:
+        # Update search indexes — skipped during bulk_ingest to avoid O(n²)
+        if self.use_indexing and self.index_manager and not self._bulk_mode_active:
             self.index_manager.rebuild_indexes(self.memories)
             self.index_manager.save_all_indexes()
-        
+
         shard_dir = os.path.join(self.workspace, "shards")
         return shard_dir
     
@@ -839,6 +847,95 @@ class MemorySystemV4(NamespaceManager):
                 self.flush()
 
         return count
+
+    # ── Sprint 2.8: bulk ingest — O(1) deferred index rebuild ───────────
+
+    def bulk_ingest(self, entries: List[Union[str, Dict]]) -> int:
+        """Ingest a list of entries with a single deferred index rebuild.
+
+        Eliminates the O(n²) ingest pattern caused by per-flush
+        ``rebuild_indexes()`` calls.  All WAL flushes that fire during
+        the bulk operation skip the full index rebuild; a single rebuild
+        is performed at the end, giving O(n) overall complexity.
+
+        Args:
+            entries: List where each item is either:
+                - ``str`` — raw content string (same as ``ingest(content)``)
+                - ``dict`` — may contain keys: ``content`` (required),
+                  ``source``, ``category``, ``memory_type``, ``tags``
+
+        Returns:
+            Total number of new memories added (duplicates and noise excluded).
+
+        Example::
+
+            count = mem.bulk_ingest([
+                "The API gateway handles authentication for all services.",
+                {"content": "Deploy using helm upgrade --install", "memory_type": "procedure"},
+                {"content": "PostgreSQL is the primary database", "source": "infra-docs"},
+            ])
+        """
+        self._bulk_mode_active = True
+        count = 0
+        try:
+            for item in entries:
+                if isinstance(item, str):
+                    count += self.ingest(item)
+                elif isinstance(item, dict):
+                    content = item.get("content", "")
+                    if not content:
+                        continue
+                    count += self.ingest(
+                        content,
+                        source=item.get("source", "inline"),
+                        category=item.get("category", "general"),
+                        memory_type=item.get("memory_type", DEFAULT_TYPE),
+                        tags=item.get("tags"),
+                    )
+        finally:
+            self._bulk_mode_active = False
+            # One final flush + index rebuild after all items are ingested
+            if self._wal.pending_count() > 0:
+                self.flush()
+            else:
+                # Even if WAL was auto-flushed mid-bulk, rebuild indexes once
+                if self.use_indexing and self.index_manager:
+                    self.index_manager.rebuild_indexes(self.memories)
+                    self.index_manager.save_all_indexes()
+            if self._read_cache is not None:
+                self._read_cache.invalidate()
+
+        return count
+
+    @contextmanager
+    def bulk_mode(self):
+        """Context manager that defers index rebuilds until exit.
+
+        All ``ingest()`` calls inside the block behave normally except
+        that WAL auto-flushes skip the full ``rebuild_indexes()`` pass.
+        A single rebuild is performed when the context exits.
+
+        Example::
+
+            with mem.bulk_mode():
+                for line in open("corpus.txt"):
+                    mem.ingest(line.strip())
+            # Index rebuilt exactly once here
+        """
+        self._bulk_mode_active = True
+        try:
+            yield self
+        finally:
+            self._bulk_mode_active = False
+            # Final flush + rebuild on exit
+            if self._wal.pending_count() > 0:
+                self.flush()
+            else:
+                if self.use_indexing and self.index_manager:
+                    self.index_manager.rebuild_indexes(self.memories)
+                    self.index_manager.save_all_indexes()
+            if self._read_cache is not None:
+                self._read_cache.invalidate()
 
     # ── analysis & synthesis ────────────────────────────────────────────
 
@@ -1693,6 +1790,62 @@ class MemorySystemV4(NamespaceManager):
             self.save()
 
         return count
+
+    # ── Sprint 2.7: Retrieval Feedback Loop ────────────────────────────
+
+    def record_outcome(self, memory_ids: List[str], outcome: str) -> int:
+        """Signal the quality of a past retrieval so memories can adapt.
+
+        Parameters
+        ----------
+        memory_ids:
+            IDs of the entries that were retrieved and used in the response.
+        outcome:
+            ``"good"`` — response was helpful; ``"bad"`` — response was
+            harmful/wrong; ``"neutral"`` — no useful signal.
+
+        Returns
+        -------
+        int
+            Number of memory entries that were actually found and mutated.
+
+        Examples
+        --------
+        ::
+
+            results = mem.search("database migration strategy")
+            ids = [r.entry.id for r in results]
+            # … use results to generate a response …
+            mem.record_outcome(ids, "good")
+        """
+        mutated = self._feedback.record_outcome(
+            memories=self.memories,
+            memory_ids=memory_ids,
+            outcome=outcome,
+        )
+        # Invalidate search cache so boosted scores are reflected immediately
+        if mutated and self._read_cache is not None:
+            self._read_cache.invalidate()
+        return mutated
+
+    def record_routing_outcome(self, model: str, outcome: str) -> None:
+        """Record a router-level outcome tied to this memory workspace.
+
+        Connects antaris-router's outcome tracking so a single JSONL log
+        captures both retrieval and routing signals.
+
+        Parameters
+        ----------
+        model:
+            Model name used in the routing decision (e.g. ``"claude-haiku-3-5"``).
+        outcome:
+            ``"good"``, ``"bad"``, or ``"neutral"``.
+        """
+        self._feedback.record_routing_outcome(model=model, outcome=outcome)
+
+    def feedback_stats(self) -> dict:
+        """Return aggregate statistics from the retrieval feedback log."""
+        return self._feedback.stats()
 
     def _append_audit(self, entry: Dict) -> None:
         """Append an entry to the audit log."""

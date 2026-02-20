@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.4.0] - 2026-02-20
+
+### Added — Sprint 2.8: O(1) Bulk Ingest via Deferred Index Rebuild
+
+- **`MemorySystem.bulk_ingest(entries)`** — ingest a list of `str` or `dict` entries with a single deferred index rebuild at the end
+  - Eliminates the O(n²) ingest pattern: every WAL flush (every 50 items) previously called `rebuild_indexes(all_memories)`, yielding 200 full rebuilds over a growing corpus at 10K entries
+  - Accepts mixed input: `str` content or `dict` with keys `content`, `source`, `category`, `memory_type`, `tags`
+  - Returns `int` — count of new memories actually added (duplicates and P3 noise excluded)
+  - Backward compatible — existing `ingest()` is completely unchanged
+- **`with mem.bulk_mode():`** — context manager version for existing `ingest()` call sites
+  - All `ingest()` calls inside the block have WAL auto-flushes that skip `rebuild_indexes()`
+  - A single index rebuild fires when the context exits
+- **Performance**: ingest throughput at 10K entries improves from ~200 rebuilds to 1; at 500K the improvement is ~10,000×
+- **`_bulk_mode_active`** flag on `MemorySystemV4` — introspectable for testing and debugging
+- 15 new bulk_ingest tests (384 total, all passing)
+
+## [2.3.0] - 2026-02-20
+
+### Added — Sprint 2.7: Retrieval Feedback Loop
+
+- **`MemorySystem.record_outcome(memory_ids, outcome)`** — signal retrieval quality back to memory
+  - `"good"` → boost `importance` × 1.2 (capped at 1.0)
+  - `"bad"` → reduce `importance` × 0.8 (floor at 0.0)
+  - `"neutral"` → no change
+  - Returns count of entries found and mutated
+- **`MemorySystem.record_routing_outcome(model, outcome)`** — log router-level outcome to the same JSONL file, connecting antaris-router outcome tracking to this workspace
+- **`MemorySystem.feedback_stats()`** — return aggregate counts from `outcomes.jsonl`
+- **`antaris_memory.feedback.RetrievalFeedback`** — standalone class if you need lower-level control; `record_outcome()`, `record_routing_outcome()`, `load_history()`, `stats()`
+- **`outcomes.jsonl`** — lightweight JSONL log in the workspace capturing all retrieval and routing feedback events with timestamps
+- **Cache invalidation** — `_read_cache` is invalidated automatically after a `record_outcome()` so boosted importance scores are reflected in the next search
+- **Exported constants**: `OUTCOME_GOOD`, `OUTCOME_BAD`, `OUTCOME_NEUTRAL`
+- 21 new feedback tests (369 total, all passing)
+
 ## [2.2.0] - 2026-02-20
 
 ### Added — Sprint 2.4: Scoped Namespace Isolation
