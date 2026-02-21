@@ -48,9 +48,14 @@ class MemoryEntry:
         self.sentiment: Dict[str, float] = {}
         self.tags: List[str] = []
         self.related: List[str] = []
-        self.hash = hashlib.md5(
-            f"{source}:{line}:{content[:100]}".encode()
-        ).hexdigest()[:12]
+        # SEC-001 RESOLVED (2026-02-20): migrated from MD5 (48-bit, broken) to
+        # BLAKE2b-128 (128-bit, collision-resistant, not cryptographically broken).
+        # digest_size=16 → 32 hex chars.  Existing stores with 12-char MD5 hashes
+        # require the migration script: tools/migrate_hashes.py
+        self.hash = hashlib.blake2b(
+            f"{source}:{line}:{content[:100]}".encode(),
+            digest_size=16,
+        ).hexdigest()
         # Sprint 2
         self.memory_type: str = memory_type
         self.type_metadata: Dict = {}
@@ -83,7 +88,7 @@ class MemoryEntry:
     @classmethod
     def from_dict(cls, d: Dict) -> "MemoryEntry":
         m = cls(
-            d["content"], d.get("source", ""), d.get("line", 0),
+            d.get("content", ""), d.get("source", ""), d.get("line", 0),
             d.get("category", "general"), d.get("created"),
             memory_type=d.get("memory_type", "episodic"),
         )

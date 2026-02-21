@@ -4,7 +4,7 @@ Retrieval Feedback Loop — Sprint 2.7
 Records retrieval outcomes and applies them back to memory entries:
 
 - ``"good"``    → boost importance (×1.2)
-- ``"bad"``     → accelerate decay (half_life × 0.8)
+- ``"bad"``     → reduce importance (×0.8)
 - ``"neutral"`` → no change
 
 Feedback is persisted as newline-delimited JSON (``outcomes.jsonl``) in the
@@ -32,7 +32,7 @@ VALID_OUTCOMES = {OUTCOME_GOOD, OUTCOME_BAD, OUTCOME_NEUTRAL}
 
 # Boost / penalty multipliers
 GOOD_IMPORTANCE_MULT = 1.2   # multiply importance by this on good outcome
-BAD_HALFLIFE_MULT = 0.8      # multiply half_life by this on bad outcome (faster decay)
+BAD_IMPORTANCE_MULT = 0.8    # multiply importance by this on bad outcome (lower = less likely to surface)
 
 
 class RetrievalFeedback:
@@ -188,18 +188,18 @@ class RetrievalFeedback:
     def _apply_to_entry(entry: "MemoryEntry", outcome: str) -> None:
         """Mutate *entry* in-place based on *outcome*.
 
-        MemoryEntry uses a fixed-slot structure with ``importance`` as the
-        primary scoring knob.  Decay half-life is system-level (DecayEngine),
-        not per-entry, so we adjust importance only:
+        ``importance`` is the per-entry scoring knob.  Decay half-life is
+        a system-level setting on ``DecayEngine`` — there is no per-entry
+        half-life to mutate.  Both outcomes adjust ``importance`` only:
 
-        - ``good``    → multiply importance by 1.2 (capped at 1.0)
-        - ``bad``     → multiply importance by 0.8 (floor at 0.0)
+        - ``good``    → multiply importance by ``GOOD_IMPORTANCE_MULT`` (1.2, capped at 1.0)
+        - ``bad``     → multiply importance by ``BAD_IMPORTANCE_MULT`` (0.8, floor at 0.0)
         - ``neutral`` → no change
         """
         if outcome == OUTCOME_GOOD:
             entry.importance = min(1.0, entry.importance * GOOD_IMPORTANCE_MULT)
         elif outcome == OUTCOME_BAD:
-            entry.importance = max(0.0, entry.importance * BAD_HALFLIFE_MULT)
+            entry.importance = max(0.0, entry.importance * BAD_IMPORTANCE_MULT)
         # NEUTRAL: no change
 
     def _append_log(self, **kwargs) -> None:

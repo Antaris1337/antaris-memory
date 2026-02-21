@@ -3,27 +3,77 @@
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Union
 
 
 class CompressionEngine:
     """Compress old memories into condensed summaries."""
 
     @staticmethod
-    def compress_file(file_path: str) -> Dict:
-        """Read a memory file and produce a compressed summary."""
+    def compress_file(
+        file_path: str,
+        workspace: Union[str, bool, None] = None,
+    ) -> Dict:
+        """Read a memory file and produce a compressed summary.
+
+        Args:
+            file_path: Absolute or relative path to the file to read.
+            workspace: Workspace root for path-boundary enforcement.
+
+                - **str** (recommended) — resolved *file_path* must be inside
+                  this directory.  Always pass this when *file_path* could be
+                  user-controlled.
+                - **False** — explicit opt-out of boundary enforcement.  Makes
+                  the security bypass a visible, searchable code smell rather
+                  than an invisible omission.  Use only when reading from a
+                  path you fully control at call time.
+                - **None (default)** — raises ``ValueError``.  A missing
+                  workspace is almost certainly a programming error; a warning
+                  that can be silenced by ``-W ignore`` is not a security
+                  control.
+
+        Returns:
+            Dict with compressed content or an ``"error"`` key on failure.
+
+        Raises:
+            ValueError: If *workspace* is ``None`` (not supplied).
+        """
+        resolved = Path(file_path).resolve()
+
+        if workspace is None:
+            raise ValueError(
+                "compress_file() requires a workspace argument for path "
+                "boundary enforcement.\n"
+                "  • Pass the workspace directory (str) to restrict reads to "
+                "that directory tree.\n"
+                "  • Pass workspace=False to explicitly opt out of boundary "
+                "enforcement when you control the path entirely."
+            )
+        elif workspace is not False:
+            workspace_resolved = Path(workspace).resolve()
+            # relative_to() raises ValueError if resolved is outside workspace.
+            # str.startswith() is NOT safe: "/data/memory_backup/evil.md"
+            # .startswith("/data/memory") → True even though it escapes.
+            try:
+                resolved.relative_to(workspace_resolved)
+            except ValueError:
+                return {
+                    "error": f"Path traversal denied: {file_path!r} is outside workspace"
+                }
+        # workspace is False → unrestricted read; caller opted out explicitly.
+
         try:
-            content = Path(file_path).read_text()
+            content = resolved.read_text()
         except (FileNotFoundError, UnicodeDecodeError):
             return {"error": f"Cannot read: {file_path}"}
 
         lines = content.strip().split("\n")
-        headers = [l for l in lines if l.startswith("#")]
-        bullets = [l.strip() for l in lines if l.strip().startswith("- ")]
+        headers = [line for line in lines if line.startswith("#")]
+        bullets = [line.strip() for line in lines if line.strip().startswith("- ")]
         markers = ["✅", "🎯", "💰", "🚀", "Decision:", "Key:", "Result:"]
         key_lines = [
-            l.strip() for l in lines
-            if any(m in l for m in markers)
+            line.strip() for line in lines
+            if any(m in line for m in markers)
         ]
 
         seen = set()
@@ -61,5 +111,7 @@ class CompressionEngine:
                 continue
             file_date = datetime.strptime(match.group(1), "%Y-%m-%d")
             if file_date < cutoff:
-                results.append(CompressionEngine.compress_file(str(f)))
+                results.append(
+                    CompressionEngine.compress_file(str(f), workspace=memory_dir)
+                )
         return results

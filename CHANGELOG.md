@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.0.0] - 2026-02-20
+
+### Changed
+- **SEC-001**: Entry hashing migrated from MD5 to BLAKE2b-128 (`digest_size=16`). Collision-resistant and cryptographically sound. Run `tools/migrate_hashes.py <store_path>` once when upgrading a pre-3.0 store — the script creates a timestamped backup before modifying anything.
+- **Audit log renamed**: `memory_audit.json` → `memory_audit.jsonl` (newline-delimited JSON). Each `_append_audit()` call is now O(1) append instead of O(n) read + rewrite. Pre-3.0 audit entries remain in the old `memory_audit.json` file and are not migrated — they are readable as a standard JSON array. GDPR-conscious deployments should retain the old file; it is not deleted on upgrade.
+- **Cross-platform locking**: `_pid_running()` in `locking.py` now uses `ctypes`/`OpenProcess` on Windows and `os.kill(pid, 0)` on POSIX. No external dependencies.
+- **`GuardConfig.fail_closed_on_crash`** (antaris-guard): new bool flag. `False` (default) = existing fail-open behaviour. `True` = crash in block mode → DENY + CRITICAL telemetry.
+
+### Breaking Changes
+- **`CompressionEngine.compress_file(path)` now requires a `workspace` argument.** Calling `compress_file(path)` without `workspace` raises `ValueError`. This prevents silent path traversal bugs. Pass the workspace directory to enforce boundary checking, or pass `workspace=False` to explicitly opt out. Callers using `compress_old_files()` (the high-level API) are unaffected — it passes `workspace` automatically.
+
+### Added
+- `GuardConfig.fail_closed_on_crash` flag (antaris-guard)
+- Compaction-aware session recovery (antaris-suite plugin): handoff JSON written before compaction, `[MEMORY RESTORED]` block injected on resume
+- Windows smoke test (`windows_smoke_test_antaris_suite.py`)
+- `tools/migrate_hashes.py` — one-shot MD5 → BLAKE2b migration script
+
+### Fixed
+- Audit log O(n²) → O(1) write via JSONL append
+- `AsyncFileLock` compatibility note added to `locking.py` (blocking `time.sleep` documented for future async work)
+- `compress()` in antaris-context warns on inputs > 2MB to surface potential regex slowness
+
 ## [2.4.0] - 2026-02-20
 
 ### Added — Sprint 2.8: O(1) Bulk Ingest via Deferred Index Rebuild

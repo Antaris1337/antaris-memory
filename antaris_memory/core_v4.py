@@ -92,7 +92,8 @@ class MemorySystemV4(NamespaceManager):
 
         # Backward compatibility paths
         self.legacy_metadata_path = os.path.join(self.workspace, "memory_metadata.json")
-        self.audit_path = os.path.join(self.workspace, "memory_audit.json")
+        # Audit log uses JSONL (append-only, O(1) per entry — avoids O(n²) full-rewrite)
+        self.audit_path = os.path.join(self.workspace, "memory_audit.jsonl")
 
         # v0.4 managers
         self.migration_manager = MigrationManager(workspace)
@@ -218,10 +219,22 @@ class MemorySystemV4(NamespaceManager):
         Called automatically after ``WALManager.flush_interval`` writes or
         when the WAL exceeds 1 MB.  Also called by ``close()``.
 
+        During ``bulk_ingest()`` / ``bulk_mode()``, shard writes are deferred:
+        the WAL counter is reset so new appends continue, but no shard I/O
+        occurs.  This eliminates the O(n²) disk-write regression where each
+        auto-flush would rewrite all shards over a growing corpus.
+
         Returns:
             ``{"flushed_entries": N, "wal_cleared": True}``
         """
         pending_before = self._wal.pending_count()
+
+        if self._bulk_mode_active:
+            # Defer all shard/disk writes — just reset the WAL counter so
+            # ingest() can keep appending without hitting the threshold again.
+            # The WAL file accumulates all entries and is flushed once at exit.
+            self._wal._write_count = 0
+            return {"flushed_entries": pending_before, "wal_cleared": False}
 
         # Persist current in-memory state (includes WAL-replayed entries)
         self.save()
@@ -1848,13 +1861,14 @@ class MemorySystemV4(NamespaceManager):
         return self._feedback.stats()
 
     def _append_audit(self, entry: Dict) -> None:
-        """Append an entry to the audit log."""
-        audit = []
-        if os.path.exists(self.audit_path):
-            with open(self.audit_path) as f:
-                audit = json.load(f)
-        audit.append(entry)
-        atomic_write_json(self.audit_path, audit)
+        """Append one entry to the JSONL audit log (O(1) — no full-read/rewrite).
+
+        Format: one JSON object per line (newline-delimited JSON).
+        Replaces the previous JSON-array approach which was O(n) read + O(n) write
+        per operation, causing O(n²) behaviour during bulk forget/purge.
+        """
+        with open(self.audit_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
 
 
 # Backward compatibility alias

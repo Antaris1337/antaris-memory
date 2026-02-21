@@ -284,6 +284,10 @@ mem.ingest_with_gating("thanks for the update!", source="chat")
 
 Classification: keyword and pattern matching — no LLM calls. 0.177ms avg per input.
 
+> **Note:** `ingest()` (and `ingest_with_gating()`) silently drops content shorter than
+> **15 characters**.  Single-concept memories ("Use Redis", "Done") fall below this threshold.
+> Store them with a brief qualifier: `"Prefer Redis for caching"` (24 chars → stored).
+
 ---
 
 ## Namespace Isolation
@@ -431,6 +435,43 @@ Measured on Apple M4, Python 3.14.
 | 5,000 | 173.7ms (0.035ms/entry) | 17.10ms | 25.70ms | 4.3s | 5.6MB |
 
 Input gating classification: **0.177ms avg** per input.
+
+---
+
+## Large Corpus Management
+
+antaris-memory can ingest at **1M+ items** using `bulk_ingest()` (11,600 items/s on M4 hardware).
+At runtime, however, a safety limit caps the active in-memory set to **20,000 entries** by default.
+This is a deliberate design choice — searching across millions of live entries would require a different
+index architecture (approximate nearest-neighbour, etc.).
+
+**What this means in practice:**
+
+```python
+# This completes in ~86s for 1M items:
+mem.bulk_ingest(corpus_generator())  # all entries written to shards on disk
+
+# On the next load(), only the 20K highest-scoring entries are loaded into RAM:
+mem.load()  # prints a UserWarning if the corpus exceeds the limit
+```
+
+A `UserWarning` is emitted when the limit is hit so you won't miss it in logs.
+
+**Working with large corpora:**
+
+```python
+# Compact the corpus: dedup + consolidate, then trim to high-value entries
+mem.compact()
+
+# Archive old shards to keep the active set small
+# (shards are plain JSON — archive to S3, local disk, etc.)
+
+# Raise the limit explicitly (advanced — ensure you have enough RAM):
+# Set _LOAD_LIMIT in core_v4._load_sharded() or subclass MemorySystemV4.
+```
+
+> **Rule of thumb:** For typical agent use (10K–100K active memories), search latency stays under 5ms.
+> At 1M loaded entries (with raised limit), p50 search is ~2.4s — plan accordingly.
 
 ---
 

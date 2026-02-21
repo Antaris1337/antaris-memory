@@ -24,7 +24,7 @@ from antaris_memory.feedback import (
     OUTCOME_BAD,
     OUTCOME_NEUTRAL,
     GOOD_IMPORTANCE_MULT,
-    BAD_HALFLIFE_MULT,
+    BAD_IMPORTANCE_MULT,
 )
 from antaris_memory.entry import MemoryEntry
 
@@ -83,7 +83,7 @@ class TestRetrievalFeedbackBadOutcome:
         fb = RetrievalFeedback(str(tmp_path))
         entry = _make_entry(importance=0.5)
         fb.record_outcome([entry], [entry.hash], OUTCOME_BAD)
-        assert entry.importance == pytest.approx(0.5 * BAD_HALFLIFE_MULT)
+        assert entry.importance == pytest.approx(0.5 * BAD_IMPORTANCE_MULT)
 
 
 class TestRetrievalFeedbackNeutralOutcome:

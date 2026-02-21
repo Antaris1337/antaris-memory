@@ -25,6 +25,7 @@ Usage:
 """
 
 import os
+import sys
 import time
 import json
 import logging
@@ -33,6 +34,54 @@ logger = logging.getLogger("antaris_memory")
 
 # Stale lock threshold — if a lock is older than this, assume the holder crashed
 STALE_LOCK_SECONDS = 300  # 5 minutes
+
+
+def _pid_running(pid: int) -> bool:
+    """Check if a process is still running.  Cross-platform, zero external deps.
+
+    POSIX: uses ``os.kill(pid, 0)`` (signal 0 = existence check, no signal sent).
+    Windows: uses ``ctypes`` to call ``OpenProcess`` + ``GetExitCodeProcess``
+    (``os.kill`` behaviour on Windows is not reliable for signal-0 checks across
+    all CPython versions).
+
+    Returns:
+        True  — process is alive (or we cannot determine liveness).
+        False — process definitively does not exist.
+    """
+    if pid == os.getpid():
+        return True
+
+    if sys.platform == "win32":
+        # ctypes is stdlib; no external deps required.
+        import ctypes  # noqa: PLC0415
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
+        if not handle:
+            # OpenProcess returns NULL when the process does not exist or we
+            # lack even query-limited access.  Treat as not running.
+            return False
+        try:
+            exit_code = ctypes.c_ulong(0)
+            ctypes.windll.kernel32.GetExitCodeProcess(
+                handle, ctypes.byref(exit_code)
+            )
+            STILL_ACTIVE = 259  # Windows constant — process still running
+            return exit_code.value == STILL_ACTIVE
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    else:
+        # POSIX: signal 0 never delivers a signal; just checks existence.
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            # ESRCH — no such process
+            return False
+        except (OSError, PermissionError):
+            # EPERM — process exists but we cannot signal it (different uid, etc.)
+            return True
 
 
 class LockTimeout(Exception):
@@ -115,6 +164,10 @@ class FileLock:
                         f"after {eff_timeout:.1f}s (holder: {self._read_holder()})"
                     )
 
+                # Blocking sleep — correct for the current synchronous API.
+                # NOTE: If an AsyncAgentPipeline is introduced in future, this
+                # will tie up the event loop. An AsyncFileLock using
+                # `await asyncio.sleep(self.poll_interval)` would be needed.
                 time.sleep(self.poll_interval)
     
     def release(self):
@@ -194,19 +247,15 @@ class FileLock:
 
             holder_pid = meta.get("pid")
 
-            # Check if holder PID is alive (POSIX only) — takes priority over age
+            # Check if holder PID is alive (cross-platform) — takes priority over age
             if holder_pid and holder_pid != os.getpid():
-                try:
-                    os.kill(holder_pid, 0)  # Signal 0 = existence check
-                except ProcessLookupError:
+                if not _pid_running(holder_pid):
                     logger.warning(
                         f"Breaking orphaned lock on {self.path} "
                         f"(holder pid={holder_pid} no longer exists)"
                     )
                     self._force_break()
                     return True
-                except (OSError, PermissionError):
-                    pass  # Process exists but we can't signal it — not stale
 
             # Fall back to age check using stored unix timestamp
             acquired_at_ts = meta.get("acquired_at_ts")
