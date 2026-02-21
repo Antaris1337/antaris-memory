@@ -9,7 +9,15 @@ Store, search, decay, and consolidate agent memories using only the Python stand
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 
-## What's New in v2.1.0
+## What's New in v2.4.0 (antaris-suite 3.0)
+
+- **`bulk_ingest(entries)`** — O(1) deferred index rebuild; ingest 1M entries without O(n²) WAL flush penalty
+- **`with mem.bulk_mode():`** — context manager for existing `ingest()` call sites; single index rebuild on exit
+- **Retrieval Feedback Loop** — `record_outcome(ids, "good"|"bad"|"neutral")` adapts memory importance in real time
+- **BLAKE2b-128 hashing** — replaces MD5 for entry deduplication (SEC-001); `tools/migrate_hashes.py` for pre-3.0 stores
+- **Audit log** — `memory_audit.json` → `memory_audit.jsonl`; O(1) append per entry, no full-file rewrite
+- **Cross-platform locking** — `_pid_running()` uses ctypes/OpenProcess on Windows, os.kill(pid,0) on POSIX
+
 
 - **Production Cleanup API** — `purge()`, `rebuild_indexes()`, `wal_flush()`, `wal_inspect()` — bulk removal, index repair, and WAL management without manual shard surgery (see [Production Cleanup API](#-production-cleanup-api-v210))
 - **WAL subsystem** — write-ahead log for safe, fast ingestion; auto-flushes every 50 appends or at 1 MB; crash-safe replay on startup
