@@ -2,6 +2,16 @@
 
 **Production-ready file-based persistent memory for AI agents. Zero dependencies (core).**
 
+**v3.1.0** — Discord message ingestion • Compaction recovery • Semantic recall roadmap • 27 source files • 393 tests**
+
+## What's New in v3.1.0
+
+- **Discord Message Bridge** — Automatically index Discord channel messages into your memory store. Full context recall from conversations without manual copy/paste.
+- **Compaction Recovery** — Fixed lifecycle hooks ensure memory state survives session compaction. Sessions reset cleanly without losing data.
+- **Semantic Search Roadmap (Phase 4.1)** — BM25 remains our competitive moat (61,030x faster than mem0). Optional sentence-transformers layer coming for large-scale shared agent memory.
+- **Anti-Decay & TTL** — Memories age gracefully. Unlike mem0, we don't accumulate forever.
+- **Local-First Privacy** — No external vector DB, no vendor lock-in. File-based and portable by design.
+
 Store, search, decay, and consolidate agent memories using only the Python standard library. Sharded storage for scalability, fast search indexes, namespace isolation, memory types, retrieval feedback loops, MCP server support, and automatic schema migration. No vector databases, no infrastructure, no API keys.
 
 [![PyPI](https://img.shields.io/pypi/v/antaris-memory)](https://pypi.org/project/antaris-memory/)
