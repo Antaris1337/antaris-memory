@@ -8,9 +8,15 @@
 
 - **Discord Message Bridge** — Automatically index Discord channel messages into your memory store. Full context recall from conversations without manual copy/paste.
 - **Compaction Recovery** — Fixed lifecycle hooks ensure memory state survives session compaction. Sessions reset cleanly without losing data.
-- **Semantic Search Roadmap (Phase 4.1)** — BM25 remains our competitive moat (61,030x faster than mem0). Optional sentence-transformers layer coming for large-scale shared agent memory.
 - **Anti-Decay & TTL** — Memories age gracefully. Unlike mem0, we don't accumulate forever.
 - **Local-First Privacy** — No external vector DB, no vendor lock-in. File-based and portable by design.
+
+## Phase 4 Roadmap
+
+**v4.0:** Platform foundation (MCP server, zero-config installer, dashboard)  
+**v4.1:** Hybrid semantic recall (BM25 + optional sentence-transformers for large-scale memory)  
+**v4.2:** Shared agent memory (distributed mempool, namespace isolation)  
+**v4.3+:** Graph intelligence (temporal knowledge tracking, fact evolution)
 
 Store, search, decay, and consolidate agent memories using only the Python standard library. Sharded storage for scalability, fast search indexes, namespace isolation, memory types, retrieval feedback loops, MCP server support, and automatic schema migration. No vector databases, no infrastructure, no API keys.
 
